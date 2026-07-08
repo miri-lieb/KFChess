@@ -10,7 +10,6 @@ def schedule_move(parsed_board, from_row, from_col, to_row, to_col):
         "remaining_time": duration,
     }
 
-
 def tick_pending_move(parsed_board, pending_move, elapsed=1):
     if pending_move is None:
         return None

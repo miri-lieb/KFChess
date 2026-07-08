@@ -54,7 +54,6 @@ def process_game_commands(parsed_board, commands):
                         selected_pos = None
                 else:
                     continue
-
         elif cmd.startswith("wait"):
             parts = cmd.split()
             elapsed = 1
