@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 
 from config import CELL_SIZE, COMMAND_CLICK, COMMAND_JUMP, COMMAND_PRINT_BOARD, COMMAND_WAIT, MOVE_DURATION_MS
-from move_rules import is_move_legal
+from movement_rules import is_valid_move as is_move_legal
 from board import Board
 
 
