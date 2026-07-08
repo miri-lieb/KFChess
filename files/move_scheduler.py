@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from board import Board
+from config import JUMP_DURATION_MS, MOVE_DURATION_MS
 from piece import Piece
 from pawn_rules import promote_if_needed
 
@@ -18,9 +19,9 @@ class PendingMove:
 
 
 class JumpState:
-    """מייצג כלי שנמצא 'באוויר' (קפץ) ומחכה 1000ms לפני שהוא נוחת בחזרה."""
+    """מייצג כלי שנמצא 'באוויר' (קפץ) ומחכה JUMP_DURATION_MS לפני שהוא נוחת בחזרה."""
 
-    def __init__(self, row: int, col: int, remaining_time: int = 1000):
+    def __init__(self, row: int, col: int, remaining_time: int = JUMP_DURATION_MS):
         self.row = row
         self.col = col
         self.remaining_time = remaining_time
@@ -33,8 +34,8 @@ class MoveScheduler:
         self.board = board
 
     def schedule_move(self, from_row: int, from_col: int, to_row: int, to_col: int) -> PendingMove:
-        """יוצר מהלך ממתין חדש, שיסתיים כעבור 1000ms."""
-        duration = 1000
+        """יוצר מהלך ממתין חדש, שיסתיים כעבור MOVE_DURATION_MS."""
+        duration = MOVE_DURATION_MS
         piece = self.board.get(from_row, from_col)
         return PendingMove(
             piece=piece.token if piece is not None else '.',

@@ -1,38 +1,40 @@
 from typing import Optional
 
+from move_context import MoveContext
 from piece import Piece
 
 
-def is_valid_pawn_move(board, r1: int, c1: int, r2: int, c2: int) -> bool:
+def is_valid_pawn_move(context: MoveContext) -> bool:
     """
     בודק חוקיות מהלך פאון בהתחשב בצבע (כיוון תנועה הפוך ללבן ולשחור),
     תא התחלה, תפיסה אלכסונית וקפיצה כפולה משורת ההתחלה.
     """
-    current_piece = board.get(r1, c1)
+    current_piece = context.current_piece
     if current_piece is None:
         return False
 
-    target_piece = board.get(r2, c2)
+    target_piece = context.target_piece
     color = current_piece.color
     if target_piece is not None and target_piece.color == color:
         return False
 
-    # לבן זז כלפי מעלה (שורה קטנה יותר), שחור זז כלפי מטה
-    direction = -1 if color == 'w' else 1
-    start_row = board.height - 1 if color == 'w' else 0
+    direction = context.direction
+    start_row = context.board.height - 1 if color == 'w' else 0
 
     # תנועה רגילה - תא אחד קדימה, בלי תפיסה
-    if c1 == c2 and r2 - r1 == direction:
+    if context.from_col == context.to_col and context.to_row - context.from_row == direction:
         return target_piece is None
 
     # קפיצה כפולה - מותר רק משורת ההתחלה, והדרך חייבת להיות פנויה
-    if c1 == c2 and r2 - r1 == 2 * direction:
-        if r1 != start_row:
+    if context.from_col == context.to_col and context.to_row - context.from_row == 2 * direction:
+        if context.from_row != start_row:
             return False
-        return target_piece is None and board.is_path_clear(r1, c1, r2, c2)
+        return target_piece is None and context.board.is_path_clear(
+            context.from_row, context.from_col, context.to_row, context.to_col
+        )
 
     # תפיסה - אלכסון אחד קדימה, רק אם יש כלי יריב ביעד
-    if abs(c2 - c1) == 1 and r2 - r1 == direction:
+    if abs(context.to_col - context.from_col) == 1 and context.to_row - context.from_row == direction:
         return target_piece is not None
 
     return False

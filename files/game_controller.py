@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 
 from board import Board
+from config import COMMAND_CLICK, COMMAND_JUMP, COMMAND_PRINT_BOARD, COMMAND_WAIT
 from movement_rules import is_valid_move
 from move_scheduler import MoveScheduler, PendingMove, JumpState
 from command_parser import parse_click_command, parse_wait_command, parse_jump_command
@@ -137,13 +138,13 @@ class GameController:
     def process_commands(self, commands: List[str]) -> None:
         """מריץ רשימת פקודות אחת אחרי השנייה, לפי סוג הפקודה."""
         for command in commands:
-            if command.startswith('click'):
+            if command.startswith(COMMAND_CLICK):
                 self.handle_click(command)
-            elif command.startswith('jump'):
+            elif command.startswith(COMMAND_JUMP):
                 self.handle_jump(command)
-            elif command.startswith('wait'):
+            elif command.startswith(COMMAND_WAIT):
                 self.handle_wait(command)
-            elif command == 'print board':
+            elif command == COMMAND_PRINT_BOARD:
                 self.board.display()
 
 
