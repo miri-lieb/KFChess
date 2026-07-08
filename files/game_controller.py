@@ -1,77 +1,17 @@
-from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from board import Board, Piece
-
-
-@dataclass
-class PendingMove:
-    piece: str
-    from_row: int
-    from_col: int
-    to_row: int
-    to_col: int
-    remaining_time: int
-
-
-class JumpState:
-    def __init__(self, row: int, col: int, remaining_time: int = 1000):
-        self.row = row
-        self.col = col
-        self.remaining_time = remaining_time
-
-
-class MoveScheduler:
-    def __init__(self, board: Board):
-        self.board = board
-
-    def schedule_move(self, from_row: int, from_col: int, to_row: int, to_col: int) -> PendingMove:
-        duration = 1000
-        piece = self.board.get(from_row, from_col)
-        return PendingMove(
-            piece=piece.token if piece is not None else '.',
-            from_row=from_row,
-            from_col=from_col,
-            to_row=to_row,
-            to_col=to_col,
-            remaining_time=duration,
-        )
-
-    def tick(self, pending_move: Optional[PendingMove], pending_jump: Optional[JumpState], elapsed: int = 1) -> Optional[PendingMove]:
-        if pending_move is None:
-            return None
-
-        pending_move.remaining_time -= elapsed
-        if pending_move.remaining_time <= 0:
-            arriving_piece = Piece.from_token(pending_move.piece)
-            if arriving_piece is None:
-                self.board.set(pending_move.from_row, pending_move.from_col, None)
-                return None
-
-            if pending_jump is not None and pending_jump.row == pending_move.to_row and pending_jump.col == pending_move.to_col:
-                airborne_piece = self.board.get(pending_jump.row, pending_jump.col)
-                if airborne_piece is not None and airborne_piece.color != arriving_piece.color:
-                    if arriving_piece.type == 'K':
-                        self.board.game_over = True
-                    self.board.set(pending_move.from_row, pending_move.from_col, None)
-                    return None
-
-            captured_piece = self.board.get(pending_move.to_row, pending_move.to_col)
-            if captured_piece is not None and captured_piece.type == 'K' and arriving_piece.color != captured_piece.color:
-                self.board.game_over = True
-
-            if pending_jump is None or pending_jump.row != pending_move.to_row or pending_jump.col != pending_move.to_col:
-                self.board.set(pending_move.to_row, pending_move.to_col, arriving_piece)
-                self.board.set(pending_move.from_row, pending_move.from_col, None)
-            else:
-                self.board.set(pending_move.from_row, pending_move.from_col, None)
-
-            return None
-
-        return pending_move
+from board import Board
+from movement_rules import is_valid_move
+from move_scheduler import MoveScheduler, PendingMove, JumpState
+from command_parser import parse_click_command, parse_wait_command, parse_jump_command
 
 
 class GameController:
+    """
+    מנהל את מצב האינטראקציה בזמן אמת: מה נבחר כרגע, אילו מהלכים/קפיצות ממתינים,
+    ומפרש פקודות (click / jump / wait / print board) ומפעיל אותן על הלוח.
+    """
+
     def __init__(self, board: Board):
         self.board = board
         self.selected_pos: Optional[Tuple[int, int]] = None
@@ -87,44 +27,11 @@ class GameController:
     def is_airborne(self) -> bool:
         return self.pending_jump is not None
 
-    def parse_click_command(self, command: str) -> Optional[Tuple[int, int]]:
-        parts = command.split()
-        if len(parts) != 3 or parts[0] != 'click':
-            return None
-
-        try:
-            x = int(parts[1])
-            y = int(parts[2])
-        except ValueError:
-            return None
-
-        return y // 100, x // 100
-
-    def parse_wait_command(self, command: str) -> int:
-        parts = command.split()
-        if len(parts) != 2 or parts[0] != 'wait':
-            return 1
-        try:
-            return int(parts[1])
-        except ValueError:
-            return 1
-
-    def parse_jump_command(self, command: str) -> Optional[Tuple[int, int]]:
-        parts = command.split()
-        if parts[0] != 'jump':
-            return None
-        if len(parts) == 1:
-            return self.selected_pos
-        if len(parts) == 3:
-            try:
-                x = int(parts[1])
-                y = int(parts[2])
-            except ValueError:
-                return None
-            return y // 100, x // 100
-        return None
-
     def resolve_click_action(self, row: int, col: int) -> Optional[str]:
+        """
+        קובע מה קליק על תא מסוים אמור לעשות, בהינתן שיש כבר כלי נבחר:
+        'select' - להחליף בחירה לכלי ידידותי אחר, 'move' - לשלוח בקשת מהלך, או None - להתעלם.
+        """
         if self.selected_pos is None:
             return None
 
@@ -136,17 +43,19 @@ class GameController:
         if target_piece is not None and current_piece.is_same_color(target_piece):
             return 'select'
 
+        # בדיקה כפולה: קודם צורת התנועה של הכלי, ואז חוקיות ביחס למצב הלוח (חסימות/תפיסות)
         if current_piece.is_legal_move(self.selected_pos[0], self.selected_pos[1], row, col) and \
-           self.board.is_valid_move(self.selected_pos[0], self.selected_pos[1], row, col):
+           is_valid_move(self.board, self.selected_pos[0], self.selected_pos[1], row, col):
             return 'move'
 
         return None
 
     def handle_click(self, command: str) -> None:
+        """מטפל בפקודת click: בחירת כלי, החלפת בחירה, או יצירת מהלך ממתין."""
         if self.board.game_over:
             return
 
-        click_position = self.parse_click_command(command)
+        click_position = parse_click_command(command)
         if click_position is None:
             return
 
@@ -156,16 +65,20 @@ class GameController:
 
         target_piece = self.board.get(row, col)
         if target_piece is not None and self.selected_pos is None:
+            # אין בחירה קודמת - קליק על כלי בוחר אותו
             self.selected_pos = (row, col)
             return
 
         if self.selected_pos is None:
+            # אין בחירה קודמת וקליק על תא ריק - מתעלמים
             return
 
         if self.pending_jump is not None and self.selected_pos == (self.pending_jump.row, self.pending_jump.col):
+            # הכלי הנבחר כרגע נמצא באוויר - אי אפשר להזיז אותו
             return
 
         if self.is_moving:
+            # יש כבר מהלך בתנועה - אי אפשר לתכנת מהלך נוסף במקביל
             return
 
         action = self.resolve_click_action(row, col)
@@ -175,16 +88,18 @@ class GameController:
             self.pending_move = self.scheduler.schedule_move(self.selected_pos[0], self.selected_pos[1], row, col)
             self.selected_pos = None
         else:
+            # מהלך לא חוקי - אם התא לפחות מכיל כלי, נבחר אותו; אחרת מבטלים את הבחירה
             if target_piece is not None:
                 self.selected_pos = (row, col)
             else:
                 self.selected_pos = None
 
     def handle_jump(self, command: str) -> None:
+        """מטפל בפקודת jump: מעביר כלי למצב 'באוויר' למשך 1000ms."""
         if self.board.game_over:
             return
 
-        jump_position = self.parse_jump_command(command)
+        jump_position = parse_jump_command(command, self.selected_pos)
         if jump_position is None:
             return
 
@@ -192,6 +107,7 @@ class GameController:
             return
 
         if self.pending_jump is not None:
+            # כבר יש כלי באוויר - אי אפשר לקפוץ שוב במקביל
             return
 
         current_piece = self.board.get(jump_position[0], jump_position[1])
@@ -199,15 +115,17 @@ class GameController:
             return
 
         if self.pending_move is not None and self.pending_move.from_row == jump_position[0] and self.pending_move.from_col == jump_position[1]:
+            # כלי שכבר בתנועה לא יכול לקפוץ
             return
 
         self.pending_jump = JumpState(jump_position[0], jump_position[1])
         self.selected_pos = None
 
     def handle_wait(self, command: str) -> None:
+        """מטפל בפקודת wait: מקדם את שעון המשחק, ומיישם מהלכים/קפיצות שהסתיימו."""
         if self.board.game_over:
             return
-        elapsed = self.parse_wait_command(command)
+        elapsed = parse_wait_command(command)
         self.pending_move = self.scheduler.tick(self.pending_move, self.pending_jump, elapsed)
         if self.pending_move is not None and self.pending_move.remaining_time <= 0:
             self.pending_move = None
@@ -217,6 +135,7 @@ class GameController:
                 self.pending_jump = None
 
     def process_commands(self, commands: List[str]) -> None:
+        """מריץ רשימת פקודות אחת אחרי השנייה, לפי סוג הפקודה."""
         for command in commands:
             if command.startswith('click'):
                 self.handle_click(command)

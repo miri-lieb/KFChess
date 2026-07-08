@@ -1,59 +1,22 @@
 from typing import List, Optional
 
-from is_valid_pawn_move import is_valid_pawn_move
-
-
-class Piece:
-    COLORS = {'w', 'b'}
-    TYPES = {'K', 'Q', 'R', 'B', 'N', 'P'}
-
-    def __init__(self, color: str, type_: str):
-        self.color = color
-        self.type = type_
-
-    @property
-    def token(self) -> str:
-        return f"{self.color}{self.type}"
-
-    @classmethod
-    def from_token(cls, token: str) -> Optional['Piece']:
-        if token == '.':
-            return None
-        if len(token) != 2:
-            return None
-        color, type_ = token[0], token[1]
-        if color not in cls.COLORS or type_ not in cls.TYPES:
-            return None
-        return cls(color, type_)
-
-    def is_same_color(self, other: Optional['Piece']) -> bool:
-        return other is not None and self.color == other.color
-
-    def is_legal_move(self, r1: int, c1: int, r2: int, c2: int) -> bool:
-        dr = abs(r2 - r1)
-        dc = abs(c2 - c1)
-        if self.type == 'K':
-            return max(dr, dc) == 1
-        if self.type == 'R':
-            return (dr > 0 and dc == 0) or (dr == 0 and dc > 0)
-        if self.type == 'B':
-            return dr == dc and dr > 0
-        if self.type == 'Q':
-            return (dr == 0 or dc == 0 or dr == dc) and (dr > 0 or dc > 0)
-        if self.type == 'N':
-            return (dr == 1 and dc == 2) or (dr == 2 and dc == 1)
-        if self.type == 'P':
-            return True
-        return False
+from piece import Piece
 
 
 class Board:
+    """
+    מייצג את מצב הלוח בלבד: הגריד, גודל, קריאה/כתיבה לתאים והדפסה.
+    בכוונה לא מכיל חוקי תנועה של שח - אלה נמצאים ב-movement_rules.py.
+    כך Board נשאר "טיפש" ומתמקד רק באחסון המצב.
+    """
+
     def __init__(self, grid: List[List[Optional[Piece]]]):
         self.grid = grid
         self.game_over = False
 
     @classmethod
     def from_lines(cls, board_lines: List[str]) -> Optional['Board']:
+        """מפרסר רשימת שורות טקסט לאובייקט Board. מחזיר None ומדפיס שגיאה אם הקלט לא תקין."""
         grid: List[List[Optional[Piece]]] = []
         expected_width = None
 
@@ -98,9 +61,14 @@ class Board:
         self.grid[row][col] = piece
 
     def is_valid_position(self, row: int, col: int) -> bool:
+        """בודק שהקואורדינטות בתוך גבולות הלוח."""
         return 0 <= row < self.height and 0 <= col < self.width
 
     def is_path_clear(self, r1: int, c1: int, r2: int, c2: int) -> bool:
+        """
+        בודק שכל התאים שבין (r1,c1) ל-(r2,c2) ריקים (לא כולל נקודת ההתחלה והסיום).
+        זו פונקציית עזר גנרית על הגריד, לא חוק שח ספציפי - לכן נשארה כאן ולא ב-movement_rules.
+        """
         step_r = (r2 > r1) - (r2 < r1)
         step_c = (c2 > c1) - (c2 < c1)
         curr_r = r1 + step_r
@@ -112,21 +80,8 @@ class Board:
             curr_c += step_c
         return True
 
-    def is_valid_move(self, r1: int, c1: int, r2: int, c2: int) -> bool:
-        current_piece = self.get(r1, c1)
-        target_piece = self.get(r2, c2)
-        if current_piece is None:
-            return False
-        if target_piece is not None and current_piece.is_same_color(target_piece):
-            return False
-
-        if current_piece.type == 'P':
-            return is_valid_pawn_move(self, r1, c1, r2, c2)
-        if current_piece.type in ('K', 'N'):
-            return True
-        return self.is_path_clear(r1, c1, r2, c2)
-
     def display(self) -> None:
+        """מדפיס את מצב הלוח הנוכחי בפורמט הטקסטואלי (טוקן לכל תא, מופרד ברווחים)."""
         for row in self.grid:
             print(' '.join(piece.token if piece is not None else '.' for piece in row))
 

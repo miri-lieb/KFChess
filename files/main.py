@@ -1,10 +1,11 @@
 import sys
 
 from board import parse_and_validate_board
-from game import process_game_commands
+from game_controller import process_game_commands
 
 
 def parse_input(lines):
+    """מפריד את שורות הקלט לשני חלקים: שורות הלוח ורשימת הפקודות, לפי הכותרות 'Board:' ו-'Commands:'."""
     board_lines = []
     commands = []
     section = None
