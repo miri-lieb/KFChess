@@ -50,6 +50,7 @@ class Piece:
 class Board:
     def __init__(self, grid: List[List[Optional[Piece]]]):
         self.grid = grid
+        self.game_over = False
 
     @classmethod
     def from_lines(cls, board_lines: List[str]) -> Optional['Board']:
