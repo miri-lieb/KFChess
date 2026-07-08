@@ -35,7 +35,6 @@ class Board:
             for token in tokens:
                 piece = Piece.from_token(token)
                 if token != '.' and piece is None:
-                    print("ERROR UNKNOWN_TOKEN")
                     return None
                 row.append(piece)
             grid.append(row)
@@ -80,10 +79,12 @@ class Board:
             curr_c += step_c
         return True
 
-    def display(self) -> None:
+    def print_board(self) -> None:
         """מדפיס את מצב הלוח הנוכחי בפורמט הטקסטואלי (טוקן לכל תא, מופרד ברווחים)."""
         for row in self.grid:
             print(' '.join(piece.token if piece is not None else '.' for piece in row))
+
+    display = print_board
 
 
 def parse_and_validate_board(board_lines: List[str]) -> Optional[Board]:
