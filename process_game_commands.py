@@ -1,13 +1,18 @@
 from is_legal_move import is_legal_move
 from print_board import print_board
 from is_valid_move import is_valid_move
+from move_scheduler import schedule_move, tick_pending_move
 
 def process_game_commands(parsed_board, commands):
     height = len(parsed_board)
     width = len(parsed_board[0]) if height > 0 else 0
     selected_pos = None
+    pending_move = None
     for cmd in commands:
         if cmd.startswith("click"):
+            if pending_move is not None:
+                continue
+
             parts = cmd.split()
             if len(parts) != 3:
                 continue
@@ -16,7 +21,7 @@ def process_game_commands(parsed_board, commands):
                 y = int(parts[2])
             except ValueError:
                 continue
-                
+
             col = x // 100
             row = y // 100
             if not (0 <= row < height and 0 <= col < width):
@@ -34,8 +39,7 @@ def process_game_commands(parsed_board, commands):
                     else:
                         if is_legal_move(current_piece, selected_pos[0], selected_pos[1], row, col) and \
                            is_valid_move(parsed_board, selected_pos[0], selected_pos[1], row, col):
-                            parsed_board[row][col] = current_piece
-                            parsed_board[selected_pos[0]][selected_pos[1]] = '.'
+                            pending_move = schedule_move(parsed_board, selected_pos[0], selected_pos[1], row, col)
                             selected_pos = None
                         else:
                             selected_pos = None
@@ -44,15 +48,21 @@ def process_game_commands(parsed_board, commands):
                     current_piece = parsed_board[selected_pos[0]][selected_pos[1]]
                     if is_legal_move(current_piece, selected_pos[0], selected_pos[1], row, col) and \
                        is_valid_move(parsed_board, selected_pos[0], selected_pos[1], row, col):
-                        parsed_board[row][col] = current_piece
-                        parsed_board[selected_pos[0]][selected_pos[1]] = '.'
+                        pending_move = schedule_move(parsed_board, selected_pos[0], selected_pos[1], row, col)
                         selected_pos = None
                     else:
                         selected_pos = None
                 else:
                     continue
-                    
+
         elif cmd.startswith("wait"):
-            continue
+            parts = cmd.split()
+            elapsed = 1
+            if len(parts) == 2:
+                try:
+                    elapsed = int(parts[1])
+                except ValueError:
+                    elapsed = 1
+            pending_move = tick_pending_move(parsed_board, pending_move, elapsed)
         elif cmd == "print board":
             print_board(parsed_board)
