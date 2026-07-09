@@ -1,7 +1,6 @@
 from typing import List, Tuple
 from config import BOARD_HEADER, COMMANDS_HEADER
 
-
 def parse_input(lines: List[str]) -> Tuple[List[str], List[str]]:
     board_lines: List[str] = []
     commands: List[str] = []

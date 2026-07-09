@@ -1,9 +1,7 @@
 from typing import List, Optional, Tuple
-
 from config import CELL_SIZE, COMMAND_CLICK, COMMAND_JUMP, COMMAND_PRINT_BOARD, COMMAND_WAIT, MOVE_DURATION_MS
 from movement_rules import is_valid_move as is_move_legal
 from board import Board
-
 
 class Game:
     def __init__(self, board: Board):
@@ -99,9 +97,19 @@ class Game:
                     attacker = self.board.get(origin_row, origin_col)
                     airborne = self.board.get(destination_row, destination_col)
                     if attacker is not None and airborne is not None and attacker.color != airborne.color:
+                        # airborne piece captures the arriving attacker in mid-air
+                        # if the arriving attacker is a king, that ends the game
+                        if attacker.type == 'K':
+                            self.board.game_over = True
                         self.board.set(origin_row, origin_col, None)
                         continue
                 destination_piece = self.board.get(origin_row, origin_col)
+                # check for capture of king -> end game
+                captured_piece = self.board.get(destination_row, destination_col)
+                if captured_piece is not None and captured_piece.type == 'K':
+                    # attacker piece may be None in weird states, guard first
+                    if destination_piece is not None and destination_piece.color != captured_piece.color:
+                        self.board.game_over = True
                 self.board.set(destination_row, destination_col, destination_piece)
                 self.board.set(origin_row, origin_col, None)
             else:
