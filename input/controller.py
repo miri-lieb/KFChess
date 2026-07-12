@@ -4,7 +4,6 @@ from engine.game_engine import GameEngine
 from input.board_mapper import pixel_to_cell
 from model.position import Position
 
-
 class Controller:
     def __init__(self, engine: GameEngine):
         self.engine = engine

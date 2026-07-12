@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from model.piece import Piece
 from model.position import Position
 
-
 @dataclass
 class Motion:
     piece: Piece

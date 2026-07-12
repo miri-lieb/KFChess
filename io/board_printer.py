@@ -14,10 +14,8 @@ LETTER_BY_KIND: Dict[str, str] = {
     PAWN: "P",
 }
 
-
 def token_for_piece(piece: Piece) -> str:
     return f"{LETTER_BY_COLOR[piece.color]}{LETTER_BY_KIND[piece.kind]}"
-
 
 def print_board(board: Board) -> None:
     for row in range(board.height):

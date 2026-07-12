@@ -6,12 +6,10 @@ from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import MoveValidation, validate_move
 
-
 @dataclass
 class MoveResult:
     is_accepted: bool
     reason: str
-
 
 class GameEngine:
     def __init__(self, board: Board):

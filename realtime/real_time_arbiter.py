@@ -5,7 +5,6 @@ from model.piece import Piece
 from model.position import Position
 from .motion import Motion
 
-
 class RealTimeArbiter:
     def __init__(self, board: Board):
         self.board = board
