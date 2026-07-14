@@ -10,7 +10,6 @@ class MoveValidation:
     is_valid: bool
     reason: str
 
-
 def validate_move(board: Board, source: Position, destination: Position) -> MoveValidation:
     if not board.is_in_bounds(source) or not board.is_in_bounds(destination):
         return MoveValidation(False, "outside_board")

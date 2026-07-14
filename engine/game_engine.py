@@ -48,11 +48,9 @@ class GameEngine:
         attacker = self.board.get_piece(source)
         if attacker is None:
             return
-
         target = self.board.get_piece(destination)
         if target is not None and target.color != attacker.color and target.kind == "king":
             self.game_over = True
-
         self.board.remove_piece(source)
         if target is not None:
             self.board.remove_piece(destination)

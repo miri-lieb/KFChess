@@ -4,7 +4,6 @@ from model.board import Board
 from model.piece import Piece, COLOR_BY_LETTER, KIND_BY_LETTER
 from model.position import Position
 
-
 def parse_board_lines(lines: List[str]) -> Board:
     board_lines = [line.strip() for line in lines if line.strip()]
     if not board_lines:
@@ -26,5 +25,4 @@ def parse_board_lines(lines: List[str]) -> Board:
             kind = KIND_BY_LETTER[token[1]]
             piece = Piece(id=f"{row}-{col}", color=color, kind=kind, cell=Position(row, col))
             board.add_piece(Position(row, col), piece)
-
     return board

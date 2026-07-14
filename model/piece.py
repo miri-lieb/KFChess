@@ -17,7 +17,6 @@ MOVING = "moving"
 CAPTURED = "captured"
 AIRBORNE = "airborne"
 
-
 @dataclass
 class Piece:
     id: str
