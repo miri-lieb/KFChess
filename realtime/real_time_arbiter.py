@@ -15,7 +15,7 @@ class RealTimeArbiter:
 
     def start_motion(
         self,
-        piece: Pie
+        piece: Piece,
         source: Position,
         destination: Position,
         duration_ms: int,

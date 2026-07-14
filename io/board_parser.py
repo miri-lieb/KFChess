@@ -20,7 +20,7 @@ def parse_board_lines(lines: List[str]) -> Board:
             if token == ".":
                 continue
             if len(token) != 2 or token[0] not in COLOR_BY_LETTER or token[1] not in KIND_BY_LETTER:
-                raise ValueError(f$"Invalid token: {token}")
+                raise ValueError(f"Invalid token: {token}")
             color = COLOR_BY_LETTER[token[0]]
             kind = KIND_BY_LETTER[token[1]]
             piece = Piece(id=f"{row}-{col}", color=color, kind=kind, cell=Position(row, col))
