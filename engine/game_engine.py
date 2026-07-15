@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from model.board import Board
+from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
 from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import MoveValidation, validate_move
@@ -57,5 +58,17 @@ class GameEngine:
         if target is not None:
             self.board.remove_piece(destination)
             captured = target
+
+        if attacker.kind == PAWN:
+            promotion_row = 0 if attacker.color == WHITE else self.board.height - 1
+            if destination.row == promotion_row:
+                attacker = Piece(
+                    id=f"Q{attacker.color[0].upper()}-{destination.row}-{destination.col}",
+                    color=attacker.color,
+                    kind=QUEEN,
+                    cell=destination,
+                    state=attacker.state,
+                )
+
         self.board.add_piece(destination, attacker)
         return captured

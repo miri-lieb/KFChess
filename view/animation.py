@@ -9,16 +9,17 @@ from engine.game_engine import GameEngine
 from CTD26.py.img import Img
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BOARD_PATH = os.path.join(SCRIPT_DIR, "CTD26", "board.png")
+ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
+BOARD_PATH = os.path.join(ASSETS_DIR, "board.png")
 PIECE_SIZE = (80, 80)
 BOARD_SIZE = (800, 800)
 ANIMATION_DELAY = 5
 ANIMATION_FRAMES = 5
-REST_STATE = "short_rest"
+REST_STATE = "long_rest"
 REST_TICKS = 100
 
 SPRITE_PATHS = {
-    code: os.path.join(SCRIPT_DIR, "CTD26", "pieces2", code, "states")
+    code: os.path.join(ASSETS_DIR, "pieces_mine", f"{code[1]}{code[0]}", "states")
     for code in ["PW", "PB", "RW", "RB", "NW", "NB", "BW", "BB", "QW", "QB", "KW", "KB"]
 }
 
