@@ -21,7 +21,7 @@ from view.animation import (
     draw_board,
     draw_selection,
     draw_legal_moves,
-    draw_rest_bars,
+    draw_rest_animation,
     compose_game_frame,
     board_origin,
     REST_TICKS,
@@ -191,7 +191,7 @@ def main():
                 del rest_timers[pos]
 
         frame = draw_board(engine, sprites, animation_tick, rest_timers)
-        draw_rest_bars(frame, rest_timers, board_img.img)
+        draw_rest_animation(frame, rest_timers, board_img.img, animation_tick)
         draw_legal_moves(frame, legal_moves, board_img.img)
         draw_selection(frame, controller.selected, board_img.img)
         composed = compose_game_frame(frame, move_log, scores, engine.game_over)

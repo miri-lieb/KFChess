@@ -192,7 +192,7 @@ def draw_legal_moves(frame: Img, legal_moves, board_img):
     cv2.addWeighted(overlay, 0.25, frame.img, 0.75, 0, frame.img)
 
 
-def draw_rest_bars(frame: Img, rest_timers, board_img):
+def draw_rest_animation(frame: Img, rest_timers, board_img, animation_tick: int):
     if not rest_timers:
         return
 
@@ -200,21 +200,31 @@ def draw_rest_bars(frame: Img, rest_timers, board_img):
     cell_w = board_w / 8
     cell_h = board_h / 8
     overlay = frame.img.copy()
+    phase = (animation_tick % (REST_TICKS * 2)) / (REST_TICKS * 2)
+    wave = int(cell_h * 0.25 * abs(2 * phase - 1))
 
     for position, timer in rest_timers.items():
         percent = max(0.0, min(1.0, timer / REST_TICKS))
         if percent <= 0:
             continue
 
-        x1 = int(position.col * cell_w + cell_w * 0.15)
-        x2 = int(position.col * cell_w + cell_w * 0.85)
+        x1 = int(position.col * cell_w + cell_w * 0.12)
+        x2 = int(position.col * cell_w + cell_w * 0.88)
+        bar_height = int(cell_h * 0.18)
         y2 = int(position.row * cell_h + cell_h - 8)
-        y1 = int(y2 - percent * (cell_h - 16))
-        color = (0, 180, 255)
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-        cv2.rectangle(overlay, (x1, int(position.row * cell_h + 8)), (x2, y2), (255, 255, 255), 1)
+        y1 = y2 - bar_height
 
-    cv2.addWeighted(overlay, 0.4, frame.img, 0.6, 0, frame.img)
+        color = (0, 150, 220)
+        alpha = 0.35 + 0.15 * wave / int(cell_h * 0.25)
+        bar_img = overlay.copy()
+        cv2.rectangle(bar_img, (x1, y1), (x2, y2), color, -1)
+        cv2.addWeighted(bar_img, alpha, overlay, 1 - alpha, 0, overlay)
+
+        fill_height = int((x2 - x1) * 0.2)
+        pulse_y = y2 - int((x2 - x1) * phase)
+        cv2.line(overlay, (x1 + 2, pulse_y), (x2 - 2, pulse_y), (255, 255, 255), 2)
+
+    cv2.addWeighted(overlay, 0.55, frame.img, 0.45, 0, frame.img)
 
 
 def _draw_scores(canvas_img, board_x, board_y, board_w, scores):
