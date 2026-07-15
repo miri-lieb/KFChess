@@ -21,8 +21,10 @@ from view.animation import (
     draw_board,
     draw_selection,
     draw_legal_moves,
+    draw_rest_bars,
     compose_game_frame,
     board_origin,
+    REST_TICKS,
 )
 
 START_PIECES = [
@@ -81,6 +83,8 @@ def on_mouse(event, x, y, flags, param):
 
     controller: Controller = param["controller"]
     engine: GameEngine = param["engine"]
+    if engine.game_over:
+        return
     rest_timers = param["rest_timers"]
     board_img = param["board_img"]
     move_log = param["move_log"]
@@ -144,6 +148,7 @@ def main():
     rest_timers = {}
     move_log = []
     legal_moves = set()
+    scores = {"white": 0, "black": 0}
     start_time = time.perf_counter()
     cv2.setMouseCallback(
         "Chess Board",
@@ -163,7 +168,17 @@ def main():
     animation_tick = 0
     while True:
         current_motion = engine.arbiter.active_motion
-        engine.wait(20)
+        captured_piece = engine.wait(20)
+        if captured_piece is not None:
+            value = {
+                "pawn": 1,
+                "knight": 3,
+                "bishop": 3,
+                "rook": 5,
+                "queen": 9,
+                "king": 0,
+            }.get(captured_piece.kind, 0)
+            scores["black" if captured_piece.color == "white" else "white"] += value
 
         if prev_motion is not None and current_motion is None:
             dest = prev_motion.destination
@@ -176,9 +191,10 @@ def main():
                 del rest_timers[pos]
 
         frame = draw_board(engine, sprites, animation_tick, rest_timers)
+        draw_rest_bars(frame, rest_timers, board_img.img)
         draw_legal_moves(frame, legal_moves, board_img.img)
         draw_selection(frame, controller.selected, board_img.img)
-        composed = compose_game_frame(frame, move_log)
+        composed = compose_game_frame(frame, move_log, scores, engine.game_over)
         cv2.imshow("Chess Board", composed.img)
         if cv2.waitKey(20) == 27:
             break

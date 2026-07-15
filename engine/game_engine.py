@@ -37,21 +37,25 @@ class GameEngine:
         self.arbiter.start_motion(piece, source, destination, duration_ms)
         return MoveResult(True, "ok")
 
-    def wait(self, ms: int) -> None:
+    def wait(self, ms: int):
         arrived = self.arbiter.advance_time(ms)
         if arrived is not None:
-            self._resolve_arrival(arrived)
+            return self._resolve_arrival(arrived)
+        return None
 
-    def _resolve_arrival(self, motion) -> None:
+    def _resolve_arrival(self, motion):
         source = motion.source
         destination = motion.destination
         attacker = self.board.get_piece(source)
         if attacker is None:
-            return
+            return None
         target = self.board.get_piece(destination)
+        captured = None
         if target is not None and target.color != attacker.color and target.kind == "king":
             self.game_over = True
         self.board.remove_piece(source)
         if target is not None:
             self.board.remove_piece(destination)
+            captured = target
         self.board.add_piece(destination, attacker)
+        return captured

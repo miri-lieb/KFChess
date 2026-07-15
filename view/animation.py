@@ -15,6 +15,7 @@ BOARD_SIZE = (800, 800)
 ANIMATION_DELAY = 5
 ANIMATION_FRAMES = 5
 REST_STATE = "short_rest"
+REST_TICKS = 100
 
 SPRITE_PATHS = {
     code: os.path.join(SCRIPT_DIR, "CTD26", "pieces2", code, "states")
@@ -191,7 +192,65 @@ def draw_legal_moves(frame: Img, legal_moves, board_img):
     cv2.addWeighted(overlay, 0.25, frame.img, 0.75, 0, frame.img)
 
 
-def compose_game_frame(board_frame: Img, move_log):
+def draw_rest_bars(frame: Img, rest_timers, board_img):
+    if not rest_timers:
+        return
+
+    board_h, board_w = board_img.shape[:2]
+    cell_w = board_w / 8
+    cell_h = board_h / 8
+    overlay = frame.img.copy()
+
+    for position, timer in rest_timers.items():
+        percent = max(0.0, min(1.0, timer / REST_TICKS))
+        if percent <= 0:
+            continue
+
+        x1 = int(position.col * cell_w + cell_w * 0.15)
+        x2 = int(position.col * cell_w + cell_w * 0.85)
+        y2 = int(position.row * cell_h + cell_h - 8)
+        y1 = int(y2 - percent * (cell_h - 16))
+        color = (0, 180, 255)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+        cv2.rectangle(overlay, (x1, int(position.row * cell_h + 8)), (x2, y2), (255, 255, 255), 1)
+
+    cv2.addWeighted(overlay, 0.4, frame.img, 0.6, 0, frame.img)
+
+
+def _draw_scores(canvas_img, board_x, board_y, board_w, scores):
+    score_box_width = 200
+    score_box_height = 60
+    x = int(board_x + board_w / 2 - score_box_width / 2)
+    y = int(board_y - score_box_height - 10)
+    background_color = (220, 220, 220)
+    border_color = (20, 20, 20)
+    cv2.rectangle(canvas_img, (x, y), (x + score_box_width, y + score_box_height), background_color, -1)
+    cv2.rectangle(canvas_img, (x, y), (x + score_box_width, y + score_box_height), border_color, 2)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    label_scale = 0.7
+    label_thickness = 2
+    value_scale = 1.0
+    value_thickness = 2
+    cv2.putText(canvas_img, f"Black: {scores['black']}", (x + 10, y + 25), font, label_scale, (0, 0, 0), label_thickness, cv2.LINE_AA)
+    cv2.putText(canvas_img, f"White: {scores['white']}", (x + 10, y + 50), font, value_scale, (0, 0, 0), value_thickness, cv2.LINE_AA)
+
+
+def _draw_game_over(canvas_img, board_x, board_y, board_w, board_h):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text = "GAME OVER"
+    scale = 2.0
+    thickness = 4
+    (text_w, text_h), _ = cv2.getTextSize(text, font, scale, thickness)
+    x = board_x + board_w // 2 - text_w // 2
+    y = board_y + board_h // 2 + text_h // 2
+    overlay = canvas_img.copy()
+    cv2.rectangle(overlay, (board_x, board_y), (board_x + board_w, board_y + board_h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.5, canvas_img, 0.5, 0, canvas_img)
+    cv2.putText(canvas_img, text, (x, y), font, scale, (0, 0, 255), thickness, cv2.LINE_AA)
+
+
+def compose_game_frame(board_frame: Img, move_log, scores, game_over=False):
     if board_frame.img.shape[2] == 4:
         board_frame.img = cv2.cvtColor(board_frame.img, cv2.COLOR_BGRA2BGR)
 
@@ -209,10 +268,14 @@ def compose_game_frame(board_frame: Img, move_log):
     canvas.img[board_y:board_y + board_h, board_x:board_x + board_w] = board_frame.img
     cv2.rectangle(canvas.img, (board_x - 2, board_y - 2), (board_x + board_w + 2, board_y + board_h + 2), (30, 30, 30), 3)
 
+    _draw_scores(canvas.img, board_x, board_y, board_w, scores)
     _draw_border_labels(canvas.img, board_x, board_y, board_w, board_h)
 
     _draw_move_panel(canvas.img, 10, board_y, panel_width - 20, "Black", [m for m in move_log if m["color"] == "black"])
     _draw_move_panel(canvas.img, board_x + board_w + 10, board_y, panel_width - 20, "White", [m for m in move_log if m["color"] == "white"])
+
+    if game_over:
+        _draw_game_over(canvas.img, board_x, board_y, board_w, board_h)
 
     return canvas
 
