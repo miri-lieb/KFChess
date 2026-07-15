@@ -6,7 +6,7 @@ import numpy as np
 from model.piece import WHITE, BLACK, ROOK, KNIGHT, BISHOP, QUEEN, KING, PAWN
 from model.position import Position
 from engine.game_engine import GameEngine
-from CTD26.py.img import Img
+from .img import Img
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
@@ -15,8 +15,11 @@ PIECE_SIZE = (80, 80)
 BOARD_SIZE = (800, 800)
 ANIMATION_DELAY = 5
 ANIMATION_FRAMES = 5
-REST_STATE = "long_rest"
+SHORT_REST_STATE = "short_rest"
+LONG_REST_STATE = "long_rest"
 REST_TICKS = 100
+SHORT_REST_TICKS = 30
+JUMP_TICKS = 20
 
 SPRITE_PATHS = {
     code: os.path.join(ASSETS_DIR, "pieces_mine", f"{code[1]}{code[0]}", "states")
@@ -32,12 +35,11 @@ KIND_TO_SYMBOL = {
     "pawn": "P",
 }
 
-
 def load_sprites():
     sprites = {}
     for code, state_dir in SPRITE_PATHS.items():
         state_frames = {}
-        for state in ["idle", "move", REST_STATE]:
+        for state in ["idle", "move", "jump", SHORT_REST_STATE, LONG_REST_STATE]:
             frame_dir = os.path.join(state_dir, state, "sprites")
             frames = []
             for frame_index in range(1, ANIMATION_FRAMES + 1):
@@ -47,10 +49,8 @@ def load_sprites():
         sprites[code] = state_frames
     return sprites
 
-
 def board_image():
     return Img().read(BOARD_PATH, size=BOARD_SIZE, keep_aspect=False)
-
 
 def cell_center(row, col, board_img, sprite_img):
     cell_w = board_img.shape[1] / 8
@@ -59,8 +59,7 @@ def cell_center(row, col, board_img, sprite_img):
     y = int(row * cell_h + (cell_h - sprite_img.img.shape[0]) / 2)
     return x, y
 
-
-def draw_board(engine: GameEngine, sprites, animation_tick: int, rest_timers):
+def draw_board(engine: GameEngine, sprites, animation_tick: int, long_rest_timers, short_rest_timers, jump_timers):
     frame = board_image()
     motion = engine.arbiter.active_motion
     moving_source = None
@@ -94,7 +93,14 @@ def draw_board(engine: GameEngine, sprites, animation_tick: int, rest_timers):
                 continue
             kind_code = KIND_TO_SYMBOL[piece.kind]
             code = f"{kind_code}{piece.color[0].upper()}"
-            state = REST_STATE if position in rest_timers else "idle"
+            if position in jump_timers:
+                state = "jump"
+            elif position in short_rest_timers:
+                state = SHORT_REST_STATE
+            elif position in long_rest_timers:
+                state = LONG_REST_STATE
+            else:
+                state = "idle"
             sprite_frames = sprites[code][state]
             frame_index = (animation_tick // ANIMATION_DELAY) % len(sprite_frames)
             sprite = sprite_frames[frame_index]
@@ -110,7 +116,6 @@ def draw_board(engine: GameEngine, sprites, animation_tick: int, rest_timers):
 
     return frame
 
-
 PANEL_WIDTH = 260
 TOP_MARGIN = 60
 BOTTOM_MARGIN = 40
@@ -118,7 +123,6 @@ BOTTOM_MARGIN = 40
 
 def board_origin():
     return PANEL_WIDTH, TOP_MARGIN
-
 
 def _draw_border_labels(canvas_img, board_x, board_y, board_w, board_h):
     files = "abcdefgh"
@@ -141,11 +145,10 @@ def _draw_border_labels(canvas_img, board_x, board_y, board_w, board_h):
         rank = str(8 - index)
         (text_w, text_h), _ = cv2.getTextSize(rank, font, font_scale, thickness)
         y = int(board_y + index * cell_h + cell_h / 2 + text_h / 2)
-        left_x = int(board_x - 24)
-        right_x = int(board_x + board_w + 14)
+        left_x = int(board_x - 26)
+        right_x = int(board_x + board_w + 20)
         cv2.putText(canvas_img, rank, (left_x, y), font, font_scale, color, thickness, cv2.LINE_AA)
         cv2.putText(canvas_img, rank, (right_x, y), font, font_scale, color, thickness, cv2.LINE_AA)
-
 
 def _draw_move_panel(canvas_img, origin_x, origin_y, width, title, entries):
     panel_height = canvas_img.shape[0] - origin_y - 40
@@ -173,7 +176,6 @@ def _draw_move_panel(canvas_img, origin_x, origin_y, width, title, entries):
         cv2.putText(canvas_img, entry["time"], (origin_x + 12, y), header_font, header_scale, border_color, 1, cv2.LINE_AA)
         cv2.putText(canvas_img, entry["notation"], (origin_x + 100, y), header_font, header_scale, border_color, 1, cv2.LINE_AA)
 
-
 def draw_legal_moves(frame: Img, legal_moves, board_img):
     if not legal_moves:
         return
@@ -192,41 +194,48 @@ def draw_legal_moves(frame: Img, legal_moves, board_img):
 
     cv2.addWeighted(overlay, 0.25, frame.img, 0.75, 0, frame.img)
 
-
-def draw_rest_animation(frame: Img, rest_timers, board_img, animation_tick: int):
-    if not rest_timers:
+def draw_rest_animation(frame: Img, long_rest_timers, short_rest_timers, jump_timers, board_img, animation_tick: int):
+    if not (long_rest_timers or short_rest_timers or jump_timers):
         return
 
     board_h, board_w = board_img.shape[:2]
     cell_w = board_w / 8
     cell_h = board_h / 8
     overlay = frame.img.copy()
-    phase = (animation_tick % (REST_TICKS * 2)) / (REST_TICKS * 2)
-    wave = int(cell_h * 0.25 * abs(2 * phase - 1))
+    phase = (animation_tick % (max(1, REST_TICKS * 2))) / (REST_TICKS * 2)
 
-    for position, timer in rest_timers.items():
+    for position, timer in jump_timers.items():
+        x1 = int(position.col * cell_w + cell_w * 0.08)
+        y1 = int(position.row * cell_h + cell_h * 0.08)
+        x2 = int(position.col * cell_w + cell_w * 0.92)
+        y2 = int(position.row * cell_h + cell_h * 0.92)
+        alpha = 0.35 + 0.25 * abs(2 * phase - 1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (10, 250, 200), -1)
+        cv2.addWeighted(overlay, alpha, frame.img, 1 - alpha, 0, overlay)
+
+    for position, timer in short_rest_timers.items():
+        percent = max(0.0, min(1.0, timer / SHORT_REST_TICKS))
+        if percent <= 0:
+            continue
+        x1 = int(position.col * cell_w + cell_w * 0.18)
+        x2 = int(position.col * cell_w + cell_w * 0.82)
+        y2 = int(position.row * cell_h + cell_h - 6)
+        y1 = int(y2 - percent * (cell_h * 0.6))
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 220, 220), -1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 255), 1)
+
+    for position, timer in long_rest_timers.items():
         percent = max(0.0, min(1.0, timer / REST_TICKS))
         if percent <= 0:
             continue
+        x1 = int(position.col * cell_w + cell_w * 0.18)
+        x2 = int(position.col * cell_w + cell_w * 0.82)
+        y2 = int(position.row * cell_h + cell_h - 6)
+        y1 = int(y2 - percent * (cell_h * 0.8))
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 120, 220), -1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 255), 1)
 
-        x1 = int(position.col * cell_w + cell_w * 0.12)
-        x2 = int(position.col * cell_w + cell_w * 0.88)
-        bar_height = int(cell_h * 0.18)
-        y2 = int(position.row * cell_h + cell_h - 8)
-        y1 = y2 - bar_height
-
-        color = (0, 150, 220)
-        alpha = 0.35 + 0.15 * wave / int(cell_h * 0.25)
-        bar_img = overlay.copy()
-        cv2.rectangle(bar_img, (x1, y1), (x2, y2), color, -1)
-        cv2.addWeighted(bar_img, alpha, overlay, 1 - alpha, 0, overlay)
-
-        fill_height = int((x2 - x1) * 0.2)
-        pulse_y = y2 - int((x2 - x1) * phase)
-        cv2.line(overlay, (x1 + 2, pulse_y), (x2 - 2, pulse_y), (255, 255, 255), 2)
-
-    cv2.addWeighted(overlay, 0.55, frame.img, 0.45, 0, frame.img)
-
+    cv2.addWeighted(overlay, 0.45, frame.img, 0.55, 0, frame.img)
 
 def _draw_scores(canvas_img, board_x, board_y, board_w, scores):
     score_box_width = 200
@@ -246,7 +255,6 @@ def _draw_scores(canvas_img, board_x, board_y, board_w, scores):
     cv2.putText(canvas_img, f"Black: {scores['black']}", (x + 10, y + 25), font, label_scale, (0, 0, 0), label_thickness, cv2.LINE_AA)
     cv2.putText(canvas_img, f"White: {scores['white']}", (x + 10, y + 50), font, value_scale, (0, 0, 0), value_thickness, cv2.LINE_AA)
 
-
 def _draw_game_over(canvas_img, board_x, board_y, board_w, board_h):
     font = cv2.FONT_HERSHEY_SIMPLEX
     text = "GAME OVER"
@@ -259,7 +267,6 @@ def _draw_game_over(canvas_img, board_x, board_y, board_w, board_h):
     cv2.rectangle(overlay, (board_x, board_y), (board_x + board_w, board_y + board_h), (0, 0, 0), -1)
     cv2.addWeighted(overlay, 0.5, canvas_img, 0.5, 0, canvas_img)
     cv2.putText(canvas_img, text, (x, y), font, scale, (0, 0, 255), thickness, cv2.LINE_AA)
-
 
 def compose_game_frame(board_frame: Img, move_log, scores, game_over=False):
     if board_frame.img.shape[2] == 4:
@@ -280,16 +287,15 @@ def compose_game_frame(board_frame: Img, move_log, scores, game_over=False):
     cv2.rectangle(canvas.img, (board_x - 2, board_y - 2), (board_x + board_w + 2, board_y + board_h + 2), (30, 30, 30), 3)
 
     _draw_scores(canvas.img, board_x, board_y, board_w, scores)
-    _draw_border_labels(canvas.img, board_x, board_y, board_w, board_h)
-
     _draw_move_panel(canvas.img, 10, board_y, panel_width - 20, "Black", [m for m in move_log if m["color"] == "black"])
     _draw_move_panel(canvas.img, board_x + board_w + 10, board_y, panel_width - 20, "White", [m for m in move_log if m["color"] == "white"])
+
+    _draw_border_labels(canvas.img, board_x, board_y, board_w, board_h)
 
     if game_over:
         _draw_game_over(canvas.img, board_x, board_y, board_w, board_h)
 
     return canvas
-
 
 def draw_selection(frame: Img, selected, board_img):
     if selected is None:
@@ -303,4 +309,3 @@ def draw_selection(frame: Img, selected, board_img):
     x2 = int(x1 + cell_w)
     y2 = int(y1 + cell_h)
     cv2.rectangle(frame.img, (x1, y1), (x2, y2), (0, 255, 255), 3)
-

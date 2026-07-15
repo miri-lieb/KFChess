@@ -25,6 +25,8 @@ from view.animation import (
     compose_game_frame,
     board_origin,
     REST_TICKS,
+    SHORT_REST_TICKS,
+    JUMP_TICKS,
 )
 
 START_PIECES = [
@@ -86,6 +88,8 @@ def on_mouse(event, x, y, flags, param):
     if engine.game_over:
         return
     rest_timers = param["rest_timers"]
+    short_rest_timers = param["short_rest_timers"]
+    jump_timers = param["jump_timers"]
     board_img = param["board_img"]
     move_log = param["move_log"]
     start_time = param["start_time"]
@@ -113,6 +117,13 @@ def on_mouse(event, x, y, flags, param):
         return
     if selected is not None and position in rest_timers:
         print("Target square is resting and cannot be selected.")
+        return
+    if selected is not None and selected == position:
+        # request a jump action on the selected piece
+        if position not in jump_timers and position not in short_rest_timers and position not in rest_timers:
+            jump_timers[position] = JUMP_TICKS
+            short_rest_timers[position] = SHORT_REST_TICKS
+        controller.selected = None
         return
 
     reason = controller.click(position)
@@ -146,6 +157,8 @@ def main():
 
     cv2.namedWindow("Chess Board")
     rest_timers = {}
+    short_rest_timers = {}
+    jump_timers = {}
     move_log = []
     legal_moves = set()
     scores = {"white": 0, "black": 0}
@@ -157,6 +170,8 @@ def main():
             "controller": controller,
             "engine": engine,
             "rest_timers": rest_timers,
+            "short_rest_timers": short_rest_timers,
+            "jump_timers": jump_timers,
             "board_img": board_img.img,
             "move_log": move_log,
             "start_time": start_time,
@@ -190,8 +205,18 @@ def main():
             if rest_timers[pos] <= 0:
                 del rest_timers[pos]
 
-        frame = draw_board(engine, sprites, animation_tick, rest_timers)
-        draw_rest_animation(frame, rest_timers, board_img.img, animation_tick)
+        for pos in list(short_rest_timers):
+            short_rest_timers[pos] -= 1
+            if short_rest_timers[pos] <= 0:
+                del short_rest_timers[pos]
+
+        for pos in list(jump_timers):
+            jump_timers[pos] -= 1
+            if jump_timers[pos] <= 0:
+                del jump_timers[pos]
+
+        frame = draw_board(engine, sprites, animation_tick, rest_timers, short_rest_timers, jump_timers)
+        draw_rest_animation(frame, rest_timers, short_rest_timers, jump_timers, board_img.img, animation_tick)
         draw_legal_moves(frame, legal_moves, board_img.img)
         draw_selection(frame, controller.selected, board_img.img)
         composed = compose_game_frame(frame, move_log, scores, engine.game_over)
