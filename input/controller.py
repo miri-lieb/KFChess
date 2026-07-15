@@ -1,7 +1,6 @@
 from typing import Optional
 
 from engine.game_engine import GameEngine
-from input.board_mapper import pixel_to_cell
 from model.position import Position
 
 class Controller:
@@ -9,8 +8,7 @@ class Controller:
         self.engine = engine
         self.selected: Optional[Position] = None
 
-    def click(self, x: int, y: int) -> Optional[str]:
-        position = pixel_to_cell(x, y)
+    def click(self, position: Position) -> Optional[str]:
         if position is None or not self.engine.board.is_in_bounds(position):
             if self.selected is not None:
                 self.selected = None
