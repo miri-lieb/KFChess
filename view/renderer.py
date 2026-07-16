@@ -116,8 +116,11 @@ def on_mouse(event, x, y, flags, param):
         print("Piece is resting and cannot be selected.")
         return
     if selected is not None and position in rest_timers:
-        print("Target square is resting and cannot be selected.")
-        return
+        selected_piece = engine.board.get_piece(selected)
+        target_piece = engine.board.get_piece(position)
+        if target_piece is None or selected_piece is None or target_piece.color == selected_piece.color:
+            print("Target square is resting and cannot be selected.")
+            return
     if selected is not None and selected == position:
         # request a jump action on the selected piece
         if position not in jump_timers and position not in short_rest_timers and position not in rest_timers:
