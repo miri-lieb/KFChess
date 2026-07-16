@@ -3,11 +3,13 @@ from typing import List
 from model.board import Board
 from model.piece import Piece, COLOR_BY_LETTER, KIND_BY_LETTER
 from model.position import Position
+from model.setup import standard_starting_board_lines
 
 def parse_board_lines(lines: List[str]) -> Board:
     board_lines = [line.strip() for line in lines if line.strip()]
     if not board_lines:
-        raise ValueError("no lines")
+        # if no lines provided, default to standard starting position
+        board_lines = standard_starting_board_lines()
 
     width = len(board_lines[0].split())
     board = Board(width, len(board_lines))

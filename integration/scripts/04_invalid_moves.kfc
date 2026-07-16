@@ -1,0 +1,14 @@
+Board:
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+Commands:
+# clicking empty source then trying to move
+click 0 0
+click 0 1
+print board

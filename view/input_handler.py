@@ -2,6 +2,7 @@ import cv2
 
 from engine.game_engine import GameEngine
 from input.controller import Controller
+from input.board_mapper import pixel_to_cell
 from model.position import Position
 from rules.piece_rules import legal_destinations
 
@@ -10,19 +11,7 @@ def position_to_algebraic(position: Position) -> str:
     rank = 8 - position.row
     return f"{file_names[position.col]}{rank}"
 
-def board_pixel_to_position(x: int, y: int, board_x: int, board_y: int, board_w: int, board_h: int) -> Position | None:
-    if x < board_x or y < board_y or x >= board_x + board_w or y >= board_y + board_h:
-        return None
-
-    rel_x = x - board_x
-    rel_y = y - board_y
-    cell_w = board_w / 8
-    cell_h = board_h / 8
-    col = int(rel_x // cell_w)
-    row = int(rel_y // cell_h)
-    if row < 0 or row >= 8 or col < 0 or col >= 8:
-        return None
-    return Position(row, col)
+# board_pixel_to_position removed; use input.board_mapper.pixel_to_cell instead
 
 def format_elapsed(seconds: float) -> str:
     minutes = int(seconds // 60)
@@ -56,7 +45,11 @@ def on_mouse(event, x, y, flags, param):
     board_x, board_y = param["board_origin"]()
     board_w = board_img.shape[1]
     board_h = board_img.shape[0]
-    position = board_pixel_to_position(x, y, board_x, board_y, board_w, board_h)
+    # convert GUI pixel coordinates into board cell Position
+    # pixel_to_cell expects x,y relative to board origin; compute relative coords
+    rel_x = x - board_x
+    rel_y = y - board_y
+    position = pixel_to_cell(rel_x, rel_y, cell_size=board_w // 8)
     if position is None:
         return
 
@@ -88,4 +81,8 @@ def on_mouse(event, x, y, flags, param):
     if controller.selected is not None:
         selected_piece = engine.board.get_piece(controller.selected)
         if selected_piece is not None:
+<<<<<<< HEAD
             legal_moves.update(legal_destinations(engine.board, selected_piece))
+=======
+            legal_moves.update(legal_destinations(engine.board, selected_piece))
+>>>>>>> 70c8cbc (Add board rendering, setup, input handling, and UI components)

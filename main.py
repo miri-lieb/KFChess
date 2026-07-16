@@ -3,9 +3,8 @@ from typing import List, Optional
 
 from engine.game_engine import GameEngine
 from input.controller import Controller
-from io.board_parser import parse_board_lines
-from io.board_printer import print_board
-
+from game_io.board_parser import parse_board_lines
+from game_io.board_printer import print_board
 
 def split_sections(lines: List[str]) -> tuple[List[str], List[str]]:
     board_lines: List[str] = []
@@ -34,7 +33,6 @@ def split_sections(lines: List[str]) -> tuple[List[str], List[str]]:
         raise ValueError("Missing board section")
     return board_lines, command_lines
 
-
 def run_commands(engine: GameEngine, controller: Controller, commands: List[str]) -> None:
     for raw_line in commands:
         line = raw_line.strip()
@@ -45,9 +43,12 @@ def run_commands(engine: GameEngine, controller: Controller, commands: List[str]
         command = parts[0].lower()
 
         if command == "click" and len(parts) == 3:
+            # Text protocol uses board cell coordinates (row, col), 0-indexed
+            from model.position import Position
+
             x = int(parts[1])
             y = int(parts[2])
-            controller.click(x, y)
+            controller.click(Position(x, y))
         elif command == "wait" and len(parts) == 2:
             ms = int(parts[1])
             engine.wait(ms)
@@ -55,7 +56,6 @@ def run_commands(engine: GameEngine, controller: Controller, commands: List[str]
             print_board(engine.board)
         else:
             raise ValueError(f"Unknown command: {line}")
-
 
 def main() -> None:
     lines = [line.rstrip("\n") for line in sys.stdin]
@@ -66,7 +66,6 @@ def main() -> None:
     controller = Controller(engine)
 
     run_commands(engine, controller, command_lines)
-
 
 if __name__ == "__main__":
     try:

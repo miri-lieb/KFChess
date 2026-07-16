@@ -27,7 +27,6 @@ class BoardRepresentation(Protocol):
 
     def move_piece(self, src: Position, dst: Position) -> None: ...
 
-
 class Board:
     """The standard in-memory BoardRepresentation: cells kept in a dict."""
 
@@ -62,4 +61,3 @@ class Board:
         piece = self._cells.pop(src)
         piece.cell = dst
         self._cells[dst] = piece
-

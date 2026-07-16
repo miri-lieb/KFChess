@@ -3,6 +3,7 @@ from typing import List
 
 from model.board import Board
 from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
+from model.player import Player
 from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import MoveValidation, validate_move
@@ -18,6 +19,12 @@ class GameEngine:
         self.board = board
         self.arbiter = RealTimeArbiter(board)
         self.game_over = False
+        # initialize players for the two sides
+        self.players = {
+            WHITE: Player(color=WHITE),
+            BLACK: Player(color=BLACK),
+        }
+        self.winner = None
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         if self.game_over:
@@ -46,11 +53,13 @@ class GameEngine:
         return events
 
     def _resolve_arrival(self, motion):
+        # מטפל בסיום תנועה: קובע יעד סופי, מטפל באכילה ובקידום רגלי.
         attacker = motion.piece
         destination = motion.destination
         captured = None
 
         if motion.return_to_fallback:
+            # אם היעד נתפס ע"י כלי מאותו צבע, מחפשים משבצת חלופית חוקית ופנויה.
             allowed_destinations = legal_destinations(self.board, attacker)
             fallback_positions = [
                 pos
@@ -58,22 +67,32 @@ class GameEngine:
                 if pos != destination and self.board.get_piece(pos) is None
             ]
             if fallback_positions:
+                # בוחרים את החלופה הקרובה ביותר ליעד המקורי.
                 final_position = min(
                     fallback_positions,
                     key=lambda pos: abs(pos.row - destination.row) + abs(pos.col - destination.col),
                 )
             else:
+                # אם אין חלופה, הכלי חוזר למשבצת המקור.
                 final_position = motion.source
         else:
+            # מסלול רגיל: אם יש יריב ביעד, מבצעים אכילה ומעדכנים מצב משחק.
             target = self.board.get_piece(destination)
             if target is not None and target.color != attacker.color:
+                # register capture with the capturing player
+                capturer = self.players.get(attacker.color)
                 if target.kind == "king":
+                    # record winner; explicit win_conditions check can be run elsewhere
                     self.game_over = True
+                    self.winner = capturer
                 self.board.remove_piece(destination)
                 captured = target
+                if capturer is not None:
+                    capturer.capture(captured)
             final_position = destination
 
         if attacker.kind == PAWN:
+            # קידום רגלי לשורה האחרונה: מחליפים את הכלי במלכה.
             promotion_row = 0 if attacker.color == WHITE else self.board.height - 1
             if final_position.row == promotion_row:
                 attacker = Piece(
@@ -84,6 +103,7 @@ class GameEngine:
                     state=attacker.state,
                 )
 
+        # מציבים את הכלי (או המלכה החדשה) במיקום הסופי על הלוח.
         attacker.cell = final_position
         self.board.add_piece(final_position, attacker)
         return captured

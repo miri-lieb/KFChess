@@ -9,6 +9,7 @@ class Controller:
         self.selected: Optional[Position] = None
 
     def click(self, position: Position) -> Optional[str]:
+        # position is expected to be a model.position.Position
         if position is None or not self.engine.board.is_in_bounds(position):
             if self.selected is not None:
                 self.selected = None

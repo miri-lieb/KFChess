@@ -13,9 +13,7 @@ KNIGHT = "knight"
 PAWN = "pawn"
 
 IDLE = "idle"
-MOVING = "moving"
-CAPTURED = "captured"
-AIRBORNE = "airborne"
+# Only keep states that are currently used by the engine. Remove unused states to avoid confusion.
 
 @dataclass
 class Piece:

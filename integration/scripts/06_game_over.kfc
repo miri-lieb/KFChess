@@ -1,0 +1,14 @@
+Board:
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+. . . . . . . .
+Commands:
+# simulate capturing a king
+click 0 0
+click 0 0
+print board
