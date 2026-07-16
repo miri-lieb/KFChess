@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import List
 
 from model.board import Board
 from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
 from model.position import Position
 from realtime.real_time_arbiter import RealTimeArbiter
 from rules.rule_engine import MoveValidation, validate_move
+from rules.piece_rules import legal_destinations
 
 @dataclass
 class MoveResult:
@@ -21,8 +22,6 @@ class GameEngine:
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         if self.game_over:
             return MoveResult(False, "game_over")
-        if self.arbiter.has_active_motion():
-            return MoveResult(False, "motion_in_progress")
 
         validation = validate_move(self.board, source, destination)
         if not validation.is_valid:
@@ -33,42 +32,58 @@ class GameEngine:
             return MoveResult(False, "empty_source")
 
         distance = max(abs(destination.row - source.row), abs(destination.col - source.col))
-        duration_ms = distance * 1000
+        duration_ms = max(1, distance * 1000)
 
         self.arbiter.start_motion(piece, source, destination, duration_ms)
         return MoveResult(True, "ok")
 
     def wait(self, ms: int):
         arrived = self.arbiter.advance_time(ms)
-        if arrived is not None:
-            return self._resolve_arrival(arrived)
-        return None
+        events = []
+        for motion in arrived:
+            captured = self._resolve_arrival(motion)
+            events.append({"motion": motion, "captured": captured})
+        return events
 
     def _resolve_arrival(self, motion):
-        source = motion.source
+        attacker = motion.piece
         destination = motion.destination
-        attacker = self.board.get_piece(source)
-        if attacker is None:
-            return None
-        target = self.board.get_piece(destination)
         captured = None
-        if target is not None and target.color != attacker.color and target.kind == "king":
-            self.game_over = True
-        self.board.remove_piece(source)
-        if target is not None:
-            self.board.remove_piece(destination)
-            captured = target
+
+        if motion.return_to_fallback:
+            allowed_destinations = legal_destinations(self.board, attacker)
+            fallback_positions = [
+                pos
+                for pos in allowed_destinations
+                if pos != destination and self.board.get_piece(pos) is None
+            ]
+            if fallback_positions:
+                final_position = min(
+                    fallback_positions,
+                    key=lambda pos: abs(pos.row - destination.row) + abs(pos.col - destination.col),
+                )
+            else:
+                final_position = motion.source
+        else:
+            target = self.board.get_piece(destination)
+            if target is not None and target.color != attacker.color:
+                if target.kind == "king":
+                    self.game_over = True
+                self.board.remove_piece(destination)
+                captured = target
+            final_position = destination
 
         if attacker.kind == PAWN:
             promotion_row = 0 if attacker.color == WHITE else self.board.height - 1
-            if destination.row == promotion_row:
+            if final_position.row == promotion_row:
                 attacker = Piece(
-                    id=f"Q{attacker.color[0].upper()}-{destination.row}-{destination.col}",
+                    id=f"Q{attacker.color[0].upper()}-{final_position.row}-{final_position.col}",
                     color=attacker.color,
                     kind=QUEEN,
-                    cell=destination,
+                    cell=final_position,
                     state=attacker.state,
                 )
 
-        self.board.add_piece(destination, attacker)
+        attacker.cell = final_position
+        self.board.add_piece(final_position, attacker)
         return captured

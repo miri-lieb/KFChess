@@ -131,15 +131,6 @@ def on_mouse(event, x, y, flags, param):
         print(f"Selected piece at {controller.selected.row},{controller.selected.col}")
     elif reason is not None:
         print(f"click {x},{y} -> row={position.row},col={position.col}, reason={reason}")
-        if reason == "ok" and engine.arbiter.active_motion is not None:
-            motion = engine.arbiter.active_motion
-            target_piece = engine.board.get_piece(motion.destination)
-            notation = move_notation(motion.piece, motion.source, motion.destination, target_piece)
-            move_log.append({
-                "color": motion.piece.color,
-                "time": format_elapsed(time.perf_counter() - start_time),
-                "notation": notation,
-            })
 
     legal_moves = param["legal_moves"]
     legal_moves.clear()
@@ -182,23 +173,30 @@ def main():
     prev_motion = None
     animation_tick = 0
     while True:
-        current_motion = engine.arbiter.active_motion
-        captured_piece = engine.wait(20)
-        if captured_piece is not None:
-            value = {
-                "pawn": 1,
-                "knight": 3,
-                "bishop": 3,
-                "rook": 5,
-                "queen": 9,
-                "king": 0,
-            }.get(captured_piece.kind, 0)
-            scores["black" if captured_piece.color == "white" else "white"] += value
+        motion_events = engine.wait(20)
+        for event in motion_events:
+            motion = event["motion"]
+            captured_piece = event["captured"]
+            if captured_piece is not None:
+                value = {
+                    "pawn": 1,
+                    "knight": 3,
+                    "bishop": 3,
+                    "rook": 5,
+                    "queen": 9,
+                    "king": 0,
+                }.get(captured_piece.kind, 0)
+                scores["black" if captured_piece.color == "white" else "white"] += value
+            notation = move_notation(motion.piece, motion.source, motion.destination, captured_piece)
+            move_log.append({
+                "color": motion.piece.color,
+                "time": format_elapsed(time.perf_counter() - start_time),
+                "notation": notation,
+            })
+            rest_timers[motion.destination] = REST_TICKS
 
-        if prev_motion is not None and current_motion is None:
-            dest = prev_motion.destination
-            rest_timers[dest] = REST_TICKS
-        prev_motion = current_motion
+        current_motions = engine.arbiter.active_motions
+        prev_motion = current_motions[0] if current_motions else None
 
         for pos in list(rest_timers):
             rest_timers[pos] -= 1

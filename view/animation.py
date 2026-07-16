@@ -61,32 +61,13 @@ def cell_center(row, col, board_img, sprite_img):
 
 def draw_board(engine: GameEngine, sprites, animation_tick: int, long_rest_timers, short_rest_timers, jump_timers):
     frame = board_image()
-    motion = engine.arbiter.active_motion
-    moving_source = None
-    moving_sprite_frames = None
-    moving_start = None
-    moving_end = None
-    move_progress = 0.0
-
-    if motion is not None:
-        moving_source = motion.source
-        kind_code = KIND_TO_SYMBOL[motion.piece.kind]
-        moving_code = f"{kind_code}{motion.piece.color[0].upper()}"
-        moving_sprite_frames = sprites[moving_code]["move"]
-        row_diff = abs(motion.destination.row - motion.source.row)
-        col_diff = abs(motion.destination.col - motion.source.col)
-        total_duration = max(row_diff, col_diff) * 1000
-        if total_duration == 0:
-            total_duration = 1
-        elapsed = total_duration - motion.remaining_time_ms
-        move_progress = min(max(elapsed / total_duration, 0.0), 1.0)
-        moving_start = cell_center(motion.source.row, motion.source.col, frame.img, moving_sprite_frames[0])
-        moving_end = cell_center(motion.destination.row, motion.destination.col, frame.img, moving_sprite_frames[0])
+    motions = list(engine.arbiter.active_motions)
+    moving_sources = {motion.source for motion in motions}
 
     for row in range(8):
         for col in range(8):
             position = Position(row, col)
-            if moving_source is not None and position == moving_source:
+            if position in moving_sources:
                 continue
             piece = engine.board.get_piece(position)
             if piece is None:
@@ -107,7 +88,13 @@ def draw_board(engine: GameEngine, sprites, animation_tick: int, long_rest_timer
             pos = cell_center(row, col, frame.img, sprite)
             sprite.draw_on(frame, *pos)
 
-    if moving_source is not None and moving_sprite_frames is not None:
+    for motion in motions:
+        kind_code = KIND_TO_SYMBOL[motion.piece.kind]
+        moving_code = f"{kind_code}{motion.piece.color[0].upper()}"
+        moving_sprite_frames = sprites[moving_code]["move"]
+        move_progress = motion.progress(engine.arbiter.elapsed_time_ms)
+        moving_start = cell_center(motion.source.row, motion.source.col, frame.img, moving_sprite_frames[0])
+        moving_end = cell_center(motion.destination.row, motion.destination.col, frame.img, moving_sprite_frames[0])
         frame_index = (animation_tick // ANIMATION_DELAY) % len(moving_sprite_frames)
         sprite = moving_sprite_frames[frame_index]
         x = int(moving_start[0] + (moving_end[0] - moving_start[0]) * move_progress)
