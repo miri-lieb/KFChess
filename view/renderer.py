@@ -11,136 +11,17 @@ if ROOT_DIR not in sys.path:
 
 from engine.game_engine import GameEngine
 from input.controller import Controller
-from model.board import Board
-from model.piece import Piece, WHITE, BLACK, ROOK, KNIGHT, BISHOP, QUEEN, KING, PAWN, IDLE
-from model.position import Position
-from rules.piece_rules import legal_destinations
-from view.animation import (
-    load_sprites,
-    board_image,
-    draw_board,
-    draw_selection,
-    draw_legal_moves,
-    draw_rest_animation,
-    compose_game_frame,
-    board_origin,
-    REST_TICKS,
-    SHORT_REST_TICKS,
-    JUMP_TICKS,
-)
+from view.board_renderer import board_image, board_origin, draw_board, draw_selection, draw_legal_moves, draw_rest_animation
+from view.sprite_loader import load_sprites, REST_TICKS, SHORT_REST_TICKS, JUMP_TICKS
+from view.ui_renderer import compose_game_frame
+from view.board_setup import create_initial_board
+from view.input_handler import on_mouse, move_notation
 
-START_PIECES = [
-    ["RB", "NB", "BB", "QB", "KB", "BB", "NB", "RB"],
-    ["PB"] * 8,
-    [None] * 8,
-    [None] * 8,
-    [None] * 8,
-    [None] * 8,
-    ["PW"] * 8,
-    ["RW", "NW", "BW", "QW", "KW", "BW", "NW", "RW"],
-]
-
-REST_TICKS = 100
-
-def make_piece(code: str, row: int, col: int) -> Piece:
-    kind_map = {"R": ROOK, "N": KNIGHT, "B": BISHOP, "Q": QUEEN, "K": KING, "P": PAWN}
-    color = WHITE if code[1] == "W" else BLACK
-    kind = kind_map[code[0]]
-    return Piece(id=f"{code}-{row}-{col}", color=color, kind=kind, cell=Position(row, col), state=IDLE)
-
-def create_initial_board() -> Board:
-    board = Board(8, 8)
-    for row in range(8):
-        for col in range(8):
-            code = START_PIECES[row][col]
-            if code is None:
-                continue
-            board.add_piece(Position(row, col), make_piece(code, row, col))
-    return board
-
-def position_to_algebraic(position: Position) -> str:
-    file_names = "abcdefgh"
-    rank = 8 - position.row
-    return f"{file_names[position.col]}{rank}"
 
 def format_elapsed(seconds: float) -> str:
     minutes = int(seconds // 60)
     seconds_rem = seconds - minutes * 60
     return f"{minutes:02d}:{seconds_rem:05.2f}"
-
-def move_notation(piece, source: Position, destination: Position, target) -> str:
-    dest_notation = position_to_algebraic(destination)
-    piece_map = {"king": "K", "queen": "Q", "rook": "R", "bishop": "B", "knight": "N"}
-    if piece.kind == "pawn":
-        prefix = "" if target is None else position_to_algebraic(source)[0] + "x"
-    else:
-        prefix = piece_map.get(piece.kind, "")
-        if target is not None:
-            prefix += "x"
-    return f"{prefix}{dest_notation}"
-
-def on_mouse(event, x, y, flags, param):
-    if event != cv2.EVENT_LBUTTONDOWN:
-        return
-
-    controller: Controller = param["controller"]
-    engine: GameEngine = param["engine"]
-    if engine.game_over:
-        return
-    rest_timers = param["rest_timers"]
-    short_rest_timers = param["short_rest_timers"]
-    jump_timers = param["jump_timers"]
-    board_img = param["board_img"]
-    move_log = param["move_log"]
-    start_time = param["start_time"]
-
-    board_x, board_y = board_origin()
-    board_w = board_img.shape[1]
-    board_h = board_img.shape[0]
-    if x < board_x or y < board_y or x >= board_x + board_w or y >= board_y + board_h:
-        return
-
-    rel_x = x - board_x
-    rel_y = y - board_y
-    cell_w = board_w / 8
-    cell_h = board_h / 8
-    col = int(rel_x // cell_w)
-    row = int(rel_y // cell_h)
-    position = Position(row, col)
-
-    if row < 0 or row >= 8 or col < 0 or col >= 8:
-        return
-
-    selected = controller.selected
-    if selected is None and position in rest_timers:
-        print("Piece is resting and cannot be selected.")
-        return
-    if selected is not None and position in rest_timers:
-        selected_piece = engine.board.get_piece(selected)
-        target_piece = engine.board.get_piece(position)
-        if target_piece is None or selected_piece is None or target_piece.color == selected_piece.color:
-            print("Target square is resting and cannot be selected.")
-            return
-    if selected is not None and selected == position:
-        # request a jump action on the selected piece
-        if position not in jump_timers and position not in short_rest_timers and position not in rest_timers:
-            jump_timers[position] = JUMP_TICKS
-            short_rest_timers[position] = SHORT_REST_TICKS
-        controller.selected = None
-        return
-
-    reason = controller.click(position)
-    if reason is None and controller.selected is not None:
-        print(f"Selected piece at {controller.selected.row},{controller.selected.col}")
-    elif reason is not None:
-        print(f"click {x},{y} -> row={position.row},col={position.col}, reason={reason}")
-
-    legal_moves = param["legal_moves"]
-    legal_moves.clear()
-    if controller.selected is not None:
-        selected_piece = engine.board.get_piece(controller.selected)
-        if selected_piece is not None:
-            legal_moves.update(legal_destinations(engine.board, selected_piece))
 
 def main():
     sprites = load_sprites()
@@ -170,10 +51,12 @@ def main():
             "move_log": move_log,
             "start_time": start_time,
             "legal_moves": legal_moves,
+            "board_origin": board_origin,
+            "short_rest_ticks": SHORT_REST_TICKS,
+            "jump_ticks": JUMP_TICKS,
         },
     )
 
-    prev_motion = None
     animation_tick = 0
     while True:
         motion_events = engine.wait(20)
@@ -198,9 +81,6 @@ def main():
             })
             rest_timers[motion.destination] = REST_TICKS
 
-        current_motions = engine.arbiter.active_motions
-        prev_motion = current_motions[0] if current_motions else None
-
         for pos in list(rest_timers):
             rest_timers[pos] -= 1
             if rest_timers[pos] <= 0:
@@ -216,7 +96,16 @@ def main():
             if jump_timers[pos] <= 0:
                 del jump_timers[pos]
 
-        frame = draw_board(engine, sprites, animation_tick, rest_timers, short_rest_timers, jump_timers)
+        frame = draw_board(
+            engine.board,
+            engine.arbiter.active_motions,
+            sprites,
+            animation_tick,
+            rest_timers,
+            short_rest_timers,
+            jump_timers,
+            engine.arbiter.elapsed_time_ms,
+        )
         draw_rest_animation(frame, rest_timers, short_rest_timers, jump_timers, board_img.img, animation_tick)
         draw_legal_moves(frame, legal_moves, board_img.img)
         draw_selection(frame, controller.selected, board_img.img)
@@ -227,6 +116,7 @@ def main():
         animation_tick += 1
 
     cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     main()
