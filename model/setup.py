@@ -1,6 +1,7 @@
 from model.board import Board
 from model.piece import Piece, WHITE, BLACK, ROOK, KNIGHT, BISHOP, QUEEN, KING, PAWN
 from model.position import Position
+from model.piece_factory import PieceFactory
 from typing import List
 
 START_PIECES = [
@@ -28,7 +29,7 @@ def standard_starting_board() -> Board:
                 color = WHITE
             kind_map = {"R": ROOK, "N": KNIGHT, "B": BISHOP, "Q": QUEEN, "K": KING, "P": PAWN}
             kind = kind_map[code]
-            piece = Piece(id=f"{row}-{col}", color=color, kind=kind, cell=Position(row, col))
+            piece = PieceFactory.create(kind, color, Position(row, col))
             board.add_piece(Position(row, col), piece)
     return board
 

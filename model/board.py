@@ -27,6 +27,10 @@ class BoardRepresentation(Protocol):
 
     def move_piece(self, src: Position, dst: Position) -> None: ...
 
+    def iter_pieces(self):
+        """Iterate over all (position, piece) pairs on the board."""
+        ...
+
 class Board:
     """The standard in-memory BoardRepresentation: cells kept in a dict."""
 
@@ -61,3 +65,7 @@ class Board:
         piece = self._cells.pop(src)
         piece.cell = dst
         self._cells[dst] = piece
+
+    def iter_pieces(self):
+        """Iterate over all (position, piece) pairs on the board."""
+        return self._cells.items()

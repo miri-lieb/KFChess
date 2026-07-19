@@ -90,7 +90,6 @@ def _draw_game_over(canvas_img, board_x, board_y, board_w, board_h):
     cv2.addWeighted(overlay, 0.5, canvas_img, 0.5, 0, canvas_img)
     cv2.putText(canvas_img, text, (x, y), font, scale, (0, 0, 255), thickness, cv2.LINE_AA)
 
-
 def compose_game_frame(board_frame: Img, move_log, scores, game_over=False):
     if board_frame.img.shape[2] == 4:
         board_frame.img = cv2.cvtColor(board_frame.img, cv2.COLOR_BGRA2BGR)

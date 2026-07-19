@@ -1,27 +1,35 @@
 from typing import Set
 
-from model.board import Board
+from model.board import BoardRepresentation
 from model.piece import Piece, ROOK, BISHOP, QUEEN, KNIGHT, KING, PAWN
 from model.position import Position
+from .interfaces import MoveGenerator
 
 
-def legal_destinations(board: Board, piece: Piece) -> Set[Position]:
-    if piece.kind == ROOK:
-        return _rook_destinations(board, piece)
-    if piece.kind == BISHOP:
-        return _bishop_destinations(board, piece)
-    if piece.kind == QUEEN:
-        return _queen_destinations(board, piece)
-    if piece.kind == KNIGHT:
-        return _knight_destinations(board, piece)
-    if piece.kind == KING:
-        return _king_destinations(board, piece)
-    if piece.kind == PAWN:
-        return _pawn_destinations(board, piece)
-    return set()
+class StandardMoveGenerator:
+    def legal_destinations(self, board: BoardRepresentation, piece: Piece) -> Set[Position]:
+        kind = piece.kind
+        if kind == ROOK:
+            return _rook_destinations(board, piece)
+        if kind == BISHOP:
+            return _bishop_destinations(board, piece)
+        if kind == QUEEN:
+            return _queen_destinations(board, piece)
+        if kind == KNIGHT:
+            return _knight_destinations(board, piece)
+        if kind == KING:
+            return _king_destinations(board, piece)
+        if kind == PAWN:
+            return _pawn_destinations(board, piece)
+        return set()
 
 
-def _sliding_destinations(board: Board, piece: Piece, directions):
+def legal_destinations(board: BoardRepresentation, piece: Piece) -> Set[Position]:
+    """Backward-compatible function."""
+    return StandardMoveGenerator().legal_destinations(board, piece)
+
+
+def _sliding_destinations(board: BoardRepresentation, piece: Piece, directions):
     positions: Set[Position] = set()
     for dr, dc in directions:
         current = Position(piece.cell.row + dr, piece.cell.col + dc)
@@ -37,15 +45,15 @@ def _sliding_destinations(board: Board, piece: Piece, directions):
     return positions
 
 
-def _rook_destinations(board: Board, piece: Piece):
+def _rook_destinations(board: BoardRepresentation, piece: Piece):
     return _sliding_destinations(board, piece, [(1, 0), (-1, 0), (0, 1), (0, -1)])
 
 
-def _bishop_destinations(board: Board, piece: Piece):
+def _bishop_destinations(board: BoardRepresentation, piece: Piece):
     return _sliding_destinations(board, piece, [(1, 1), (1, -1), (-1, 1), (-1, -1)])
 
 
-def _queen_destinations(board: Board, piece: Piece):
+def _queen_destinations(board: BoardRepresentation, piece: Piece):
     return _sliding_destinations(
         board,
         piece,
@@ -53,7 +61,7 @@ def _queen_destinations(board: Board, piece: Piece):
     )
 
 
-def _knight_destinations(board: Board, piece: Piece):
+def _knight_destinations(board: BoardRepresentation, piece: Piece):
     positions: Set[Position] = set()
     for dr, dc in [(1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1)]:
         candidate = Position(piece.cell.row + dr, piece.cell.col + dc)
@@ -64,7 +72,7 @@ def _knight_destinations(board: Board, piece: Piece):
     return positions
 
 
-def _king_destinations(board: Board, piece: Piece):
+def _king_destinations(board: BoardRepresentation, piece: Piece):
     positions: Set[Position] = set()
     for dr in (-1, 0, 1):
         for dc in (-1, 0, 1):
@@ -78,7 +86,7 @@ def _king_destinations(board: Board, piece: Piece):
     return positions
 
 
-def _pawn_destinations(board: Board, piece: Piece):
+def _pawn_destinations(board: BoardRepresentation, piece: Piece):
     positions: Set[Position] = set()
     forward = -1 if piece.color == "white" else 1
     row = piece.cell.row

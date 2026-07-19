@@ -81,8 +81,4 @@ def on_mouse(event, x, y, flags, param):
     if controller.selected is not None:
         selected_piece = engine.board.get_piece(controller.selected)
         if selected_piece is not None:
-<<<<<<< HEAD
             legal_moves.update(legal_destinations(engine.board, selected_piece))
-=======
-            legal_moves.update(legal_destinations(engine.board, selected_piece))
->>>>>>> 70c8cbc (Add board rendering, setup, input handling, and UI components)

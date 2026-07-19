@@ -3,19 +3,23 @@ import os
 from model.piece import WHITE, BLACK, ROOK, KNIGHT, BISHOP, QUEEN, KING, PAWN
 from model.position import Position
 from .img import Img
+from config import (
+    PIECE_SPRITE_SIZE,
+    BOARD_SPRITE_SIZE,
+    ANIMATION_DELAY,
+    ANIMATION_FRAMES,
+    REST_TICKS,
+    SHORT_REST_TICKS,
+    JUMP_TICKS,
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
 BOARD_PATH = os.path.join(ASSETS_DIR, "board.png")
-PIECE_SIZE = (80, 80)
-BOARD_SIZE = (800, 800)
-ANIMATION_DELAY = 5
-ANIMATION_FRAMES = 5
+PIECE_SIZE = PIECE_SPRITE_SIZE
+BOARD_SIZE = BOARD_SPRITE_SIZE
 SHORT_REST_STATE = "short_rest"
 LONG_REST_STATE = "long_rest"
-REST_TICKS = 100
-SHORT_REST_TICKS = 30
-JUMP_TICKS = 20
 
 SPRITE_CODES = ["PW", "PB", "RW", "RB", "NW", "NB", "BW", "BB", "QW", "QB", "KW", "KB"]
 SPRITE_PATHS = {
