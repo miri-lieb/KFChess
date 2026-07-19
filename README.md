@@ -54,3 +54,28 @@ If you want, I can:
 1. Add CI (GitHub Actions) to run the tests on push/PR.
 2. Expand tests for all piece movement/capture cases.
 3. Add examples or a simple runner wrapper to convert human-friendly cell coordinates to pixel clicks.
+
+## Local multiplayer milestone
+
+- One-time setup from the repo root: `python3 -m pip install -e .`
+- Start the local WebSocket server: `python3 -m network.server_main`
+- Start one shell client per player: `python3 -m network.shell_client`
+- Start the graphical network client: `python3 -m network.opencv_client`
+- After the editable install, those commands work even if your current directory is `view/` or another subdirectory.
+- Optional shortcuts after install:
+  - `kfchess-server`
+  - `kfchess-shell`
+  - `kfchess-gui`
+- Graphical roles:
+  - first login gets **white**
+  - second login gets **black**
+  - later logins become **observer**
+- Login is username-based only:
+  - exactly two active player seats
+  - additional clients join as observers
+- Shell client commands:
+  - `move <src_row> <src_col> <dst_row> <dst_col>`
+  - `snapshot`
+  - `quit`
+
+The server publishes JSON events for `player_joined`, `game_started`, `move_requested`, `move_resolved`, and `game_over`.

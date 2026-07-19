@@ -1,0 +1,3 @@
+[console_scripts]
+kfchess-server = network.server_main:main
+kfchess-shell = network.shell_client:main

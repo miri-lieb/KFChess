@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: kfchess
+Version: 0.1.0
+Summary: KFChess local multiplayer and rendering project
+Requires-Python: >=3.11

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 from model.board import Board, BoardRepresentation
 from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
@@ -9,12 +9,21 @@ from realtime.real_time_arbiter import RealTimeArbiter
 from rules.interfaces import MoveValidator, MoveGenerator, WinConditionChecker, MoveValidation
 from rules.promotion import PromotionService, PromotionResult
 from config import MOTION_SPEED_MS_PER_CELL
+from network.event_bus import InMemoryEventBus
+from network.serialization import motion_to_dict, piece_to_dict, player_to_dict, position_to_dict
 
 
 @dataclass
 class MoveResult:
     is_accepted: bool
     reason: str
+
+
+@dataclass
+class ArrivalResult:
+    captured: Optional[Piece]
+    piece: Piece
+    final_position: Position
 
 
 class GameEngine:
@@ -26,6 +35,7 @@ class GameEngine:
         win_checker: Optional[WinConditionChecker] = None,
         promotion_service: Optional[PromotionService] = None,
         arbiter: Optional[RealTimeArbiter] = None,
+        event_bus: Optional[InMemoryEventBus] = None,
     ):
         self.board = board
         self._validator = move_validator or StandardMoveValidator()
@@ -33,6 +43,7 @@ class GameEngine:
         self._win_checker = win_checker or StandardWinChecker()
         self._promotion = promotion_service or StandardPromotionService()
         self.arbiter = arbiter or RealTimeArbiter()
+        self.event_bus = event_bus
         self.game_over = False
         self.players = {
             WHITE: Player(color=WHITE),
@@ -42,39 +53,56 @@ class GameEngine:
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         if self.game_over:
-            return MoveResult(False, "game_over")
+            result = MoveResult(False, "game_over")
+            self._publish_move_requested(source, destination, None, result)
+            return result
 
         validation = self._validator.validate(self.board, source, destination)
         if not validation.is_valid:
-            return MoveResult(False, validation.reason)
+            piece = self.board.get_piece(source)
+            result = MoveResult(False, validation.reason)
+            self._publish_move_requested(source, destination, piece, result)
+            return result
 
         piece = self.board.get_piece(source)
         if piece is None:
-            return MoveResult(False, "empty_source")
+            result = MoveResult(False, "empty_source")
+            self._publish_move_requested(source, destination, None, result)
+            return result
 
         # Check if piece is already in flight
         if self.arbiter.is_piece_in_flight(piece):
-            return MoveResult(False, "piece_in_flight")
+            result = MoveResult(False, "piece_in_flight")
+            self._publish_move_requested(source, destination, piece, result)
+            return result
 
         distance = max(abs(destination.row - source.row), abs(destination.col - source.col))
         duration_ms = max(1, distance * MOTION_SPEED_MS_PER_CELL)
 
-        self.arbiter.start_motion(piece, source, destination, duration_ms)
-        return MoveResult(True, "ok")
+        motion = self.arbiter.start_motion(piece, source, destination, duration_ms)
+        result = MoveResult(True, "ok")
+        self._publish_move_requested(source, destination, piece, result, motion)
+        return result
 
     def wait(self, ms: int):
         arrived = self.arbiter.advance_time(ms)
         events = []
         for motion in arrived:
-            captured = self._resolve_arrival(motion)
-            events.append({"motion": motion, "captured": captured})
+            arrival = self._resolve_arrival(motion)
+            event = {
+                "motion": motion,
+                "captured": arrival.captured,
+                "piece": arrival.piece,
+                "final_position": arrival.final_position,
+            }
+            events.append(event)
+            self._publish_move_resolved(motion, arrival)
         return events
 
     def check_win_condition(self):
         result = self._win_checker.check(self.board)
         if result:
-            self.game_over = True
-            self.winner = self.players.get(result.winner_color)
+            self._mark_game_over(result.winner_color, "win_condition")
         return result
 
     def _resolve_arrival(self, motion):
@@ -101,8 +129,7 @@ class GameEngine:
             if target is not None and target.color != attacker.color:
                 capturer = self.players.get(attacker.color)
                 if target.kind == "king":
-                    self.game_over = True
-                    self.winner = capturer
+                    self._mark_game_over(attacker.color, "king_captured")
                 self.board.remove_piece(destination)
                 captured = target
                 if capturer is not None:
@@ -118,7 +145,59 @@ class GameEngine:
             self.board.remove_piece(motion.source)
         attacker.cell = final_position
         self.board.add_piece(final_position, attacker)
-        return captured
+        return ArrivalResult(captured=captured, piece=attacker, final_position=final_position)
+
+    def _publish_move_requested(
+        self,
+        source: Position,
+        destination: Position,
+        piece: Optional[Piece],
+        result: MoveResult,
+        motion=None,
+    ) -> None:
+        if self.event_bus is None:
+            return
+        payload = {
+            "source": position_to_dict(source),
+            "destination": position_to_dict(destination),
+            "accepted": result.is_accepted,
+            "reason": result.reason,
+            "elapsed_time_ms": self.arbiter.elapsed_time_ms,
+        }
+        if piece is not None:
+            payload["piece"] = piece_to_dict(piece)
+        if motion is not None:
+            payload["motion"] = motion_to_dict(motion)
+        self.event_bus.publish("move_requested", payload)
+
+    def _publish_move_resolved(self, motion, arrival: ArrivalResult) -> None:
+        if self.event_bus is None:
+            return
+        payload = {
+            "motion": motion_to_dict(motion),
+            "piece": piece_to_dict(arrival.piece),
+            "final_position": position_to_dict(arrival.final_position),
+            "captured": None if arrival.captured is None else piece_to_dict(arrival.captured),
+            "players": {
+                color: player_to_dict(player)
+                for color, player in self.players.items()
+            },
+            "game_over": self.game_over,
+            "winner_color": None if self.winner is None else self.winner.color,
+            "elapsed_time_ms": self.arbiter.elapsed_time_ms,
+        }
+        self.event_bus.publish("move_resolved", payload)
+
+    def _mark_game_over(self, winner_color: Optional[str], reason: str) -> None:
+        if self.game_over:
+            return
+        self.game_over = True
+        self.winner = self.players.get(winner_color) if winner_color is not None else None
+        if self.event_bus is not None:
+            self.event_bus.publish("game_over", {
+                "winner_color": winner_color,
+                "reason": reason,
+            })
 
 
 # Backward-compatible default implementations

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kfchess"
+version = "0.1.0"
+description = "KFChess local multiplayer and rendering project"
+requires-python = ">=3.11"
+
+[project.scripts]
+kfchess-server = "network.server_main:main"
+kfchess-shell = "network.shell_client:main"
+kfchess-gui = "network.opencv_client:main"
+
+[tool.setuptools]
+py-modules = ["config", "main"]
+
+[tool.setuptools.packages.find]
+include = ["engine*", "game_io*", "input*", "model*", "network*", "realtime*", "rules*", "texttests*", "view*"]

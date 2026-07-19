@@ -40,6 +40,7 @@ class RealTimeArbiter:
         )
         self.active_motions.append(motion)
         self.in_flight_pieces.append(InFlightPiece(piece, source, destination))
+        return motion
 
     def is_piece_in_flight(self, piece: Piece) -> bool:
         return any(p.piece is piece for p in self.in_flight_pieces)
