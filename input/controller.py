@@ -1,15 +1,20 @@
-from typing import Optional
-
-from engine.game_engine import GameEngine
+from typing import Optional, Protocol
 from model.position import Position
+from model.board import BoardRepresentation
+
+
+class EngineView(Protocol):
+    board: BoardRepresentation
+    game_over: bool
+    def request_move(self, source: Position, destination: Position): ...
+
 
 class Controller:
-    def __init__(self, engine: GameEngine):
+    def __init__(self, engine: EngineView):
         self.engine = engine
         self.selected: Optional[Position] = None
 
     def click(self, position: Position) -> Optional[str]:
-        # position is expected to be a model.position.Position
         if position is None or not self.engine.board.is_in_bounds(position):
             if self.selected is not None:
                 self.selected = None

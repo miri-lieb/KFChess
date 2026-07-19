@@ -5,18 +5,9 @@ from model.position import Position
 from .motion import Motion
 
 
-class InFlightPiece:
-    """Represents a piece currently in motion, not yet committed to the board."""
-    def __init__(self, piece: Piece, source: Position, destination: Position):
-        self.piece = piece
-        self.source = source
-        self.destination = destination
-
-
 class RealTimeArbiter:
     def __init__(self):
         self.active_motions: List[Motion] = []
-        self.in_flight_pieces: List[InFlightPiece] = []
         self.elapsed_time_ms = 0
         self.order_counter = 0
 
@@ -39,16 +30,15 @@ class RealTimeArbiter:
             return_to_fallback=should_return_to_fallback,
         )
         self.active_motions.append(motion)
-        self.in_flight_pieces.append(InFlightPiece(piece, source, destination))
         return motion
 
     def is_piece_in_flight(self, piece: Piece) -> bool:
-        return any(p.piece is piece for p in self.in_flight_pieces)
+        return any(m.piece is piece for m in self.active_motions)
 
     def get_in_flight_destination(self, piece: Piece) -> Optional[Position]:
-        for p in self.in_flight_pieces:
-            if p.piece is piece:
-                return p.destination
+        for m in self.active_motions:
+            if m.piece is piece:
+                return m.destination
         return None
 
     def advance_time(self, ms: int):
@@ -60,7 +50,4 @@ class RealTimeArbiter:
             return []
         arrived.sort(key=lambda motion: (motion.finish_time, motion.order))
         self.active_motions = [motion for motion in self.active_motions if motion not in arrived]
-        # Remove from in-flight tracking
-        for motion in arrived:
-            self.in_flight_pieces = [p for p in self.in_flight_pieces if p.piece is not motion.piece]
         return arrived

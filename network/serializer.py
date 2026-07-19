@@ -1,3 +1,5 @@
+"""Network serialization utilities - converts domain events to wire format."""
+
 from config import PIECE_VALUES
 from model.piece import Piece
 from model.position import Position
@@ -12,7 +14,7 @@ def position_from_dict(payload: dict) -> Position:
     return Position(row=int(payload["row"]), col=int(payload["col"]))
 
 
-def piece_to_dict(piece) -> dict:
+def piece_to_dict(piece: Piece) -> dict:
     return {
         "id": piece.id,
         "color": piece.color,
@@ -21,7 +23,17 @@ def piece_to_dict(piece) -> dict:
     }
 
 
-def motion_to_dict(motion) -> dict:
+def piece_from_dict(payload: dict) -> Piece:
+    cell = position_from_dict(payload["cell"])
+    return Piece(
+        id=payload["id"],
+        color=payload["color"],
+        kind=payload["kind"],
+        cell=cell,
+    )
+
+
+def motion_to_dict(motion: Motion) -> dict:
     return {
         "piece": piece_to_dict(motion.piece),
         "source": position_to_dict(motion.source),
@@ -66,16 +78,6 @@ def snapshot_to_dict(engine) -> dict:
         "game_over": engine.game_over,
         "winner_color": None if engine.winner is None else engine.winner.color,
     }
-
-
-def piece_from_dict(payload: dict) -> Piece:
-    cell = position_from_dict(payload["cell"])
-    return Piece(
-        id=payload["id"],
-        color=payload["color"],
-        kind=payload["kind"],
-        cell=cell,
-    )
 
 
 def motion_from_dict(payload: dict) -> Motion:

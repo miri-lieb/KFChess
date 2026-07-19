@@ -81,7 +81,7 @@ class GameRunner:
         self.state.animation_tick += 1
 
     def _move_notation(self, motion, captured) -> str:
-        from view.input_handler import move_notation
+        from game_io.notation import move_notation
         return move_notation(motion.piece, motion.source, motion.destination, captured)
 
     def _format_elapsed(self, seconds: float) -> str:
@@ -94,9 +94,3 @@ class GameRunner:
             timers[pos] -= 1
             if timers[pos] <= 0:
                 del timers[pos]
-
-    def handle_click(self, position: Position):
-        """Process a click from the view layer."""
-        from view.input_handler import on_mouse
-        # Delegate to input handler logic
-        pass

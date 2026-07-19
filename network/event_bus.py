@@ -1,15 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-
 @dataclass(frozen=True)
 class GameEvent:
     type: str
     payload: dict[str, Any]
 
-
 EventHandler = Callable[[GameEvent], None]
-
 
 class InMemoryEventBus:
     def __init__(self):
@@ -29,4 +26,3 @@ class InMemoryEventBus:
         for handler in self._subscribers.get(event_type, []):
             handler(event)
         return event
-

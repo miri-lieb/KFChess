@@ -5,12 +5,7 @@ from model.board import BoardRepresentation
 from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
 from model.position import Position
 from model.piece_factory import PieceFactory
-
-
-@dataclass
-class PromotionResult:
-    promoted_piece: Optional[Piece]
-    was_promoted: bool
+from .interfaces import PromotionResult
 
 
 class PromotionService(Protocol):

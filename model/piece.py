@@ -12,8 +12,6 @@ BISHOP = "bishop"
 KNIGHT = "knight"
 PAWN = "pawn"
 
-IDLE = "idle"
-# Only keep states that are currently used by the engine. Remove unused states to avoid confusion.
 
 @dataclass
 class Piece:
@@ -21,7 +19,6 @@ class Piece:
     color: str
     kind: str
     cell: Position
-    state: str = IDLE
 
 COLOR_BY_LETTER = {"w": WHITE, "b": BLACK}
 KIND_BY_LETTER = {"K": KING, "Q": QUEEN, "R": ROOK, "B": BISHOP, "N": KNIGHT, "P": PAWN}

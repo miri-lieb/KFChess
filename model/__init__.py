@@ -1,4 +1,4 @@
-from .piece import Piece, WHITE, BLACK, KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN, IDLE
+from .piece import Piece, WHITE, BLACK, KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN
 from .position import Position
 from .board import Board, BoardRepresentation, OccupiedCellError, DuplicatePieceIdError
 from .player import Player
@@ -15,7 +15,6 @@ __all__ = [
     "BISHOP",
     "KNIGHT",
     "PAWN",
-    "IDLE",
     "Position",
     "Board",
     "BoardRepresentation",

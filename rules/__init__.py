@@ -1,7 +1,7 @@
 from .interfaces import MoveValidator, MoveGenerator, WinConditionChecker, MoveValidation, WinResult
-from .rule_engine import StandardMoveValidator, validate_move
-from .piece_rules import StandardMoveGenerator, legal_destinations
-from .win_conditions import StandardWinChecker, check_win_condition
+from .rule_engine import StandardMoveValidator
+from .piece_rules import StandardMoveGenerator
+from .win_conditions import StandardWinChecker
 from .promotion import PromotionService, StandardPromotionService, PromotionResult
 
 __all__ = [
@@ -11,11 +11,8 @@ __all__ = [
     "MoveValidation",
     "WinResult",
     "StandardMoveValidator",
-    "validate_move",
     "StandardMoveGenerator",
-    "legal_destinations",
     "StandardWinChecker",
-    "check_win_condition",
     "PromotionService",
     "StandardPromotionService",
     "PromotionResult",

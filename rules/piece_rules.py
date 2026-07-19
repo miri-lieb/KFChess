@@ -25,7 +25,7 @@ class StandardMoveGenerator:
 
 
 def legal_destinations(board: BoardRepresentation, piece: Piece) -> Set[Position]:
-    """Backward-compatible function."""
+    """Shared helper to get legal destinations for a piece."""
     return StandardMoveGenerator().legal_destinations(board, piece)
 
 
@@ -91,16 +91,13 @@ def _pawn_destinations(board: BoardRepresentation, piece: Piece):
     forward = -1 if piece.color == "white" else 1
     row = piece.cell.row
     col = piece.cell.col
-
     forward_pos = Position(row + forward, col)
     if board.is_in_bounds(forward_pos) and board.get_piece(forward_pos) is None:
         positions.add(forward_pos)
-
     for dc in (-1, 1):
         capture = Position(row + forward, col + dc)
         if board.is_in_bounds(capture):
             target = board.get_piece(capture)
             if target is not None and target.color != piece.color:
                 positions.add(capture)
-
     return positions

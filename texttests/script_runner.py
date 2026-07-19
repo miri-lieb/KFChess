@@ -2,6 +2,7 @@ from typing import List
 from engine.game_engine import GameEngine
 from input.controller import Controller
 from game_io.board_parser import parse_board_lines
+from game_io.commands import run_commands
 
 
 def run_script(lines: List[str]):
@@ -25,7 +26,5 @@ def run_script(lines: List[str]):
     board = parse_board_lines(board_lines)
     engine = GameEngine(board)
     controller = Controller(engine)
-    # reuse main.run_commands logic by importing here to avoid duplication
-    from main import run_commands
     run_commands(engine, controller, commands)
     return engine, controller

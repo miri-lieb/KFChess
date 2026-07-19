@@ -17,7 +17,6 @@ class PieceFactory:
         color: str,
         position: Position,
         piece_id: Optional[str] = None,
-        state: str = "idle",
     ) -> Piece:
         """Create a new piece.
         
@@ -26,7 +25,6 @@ class PieceFactory:
             color: Piece color (WHITE, BLACK)
             position: Board position
             piece_id: Optional custom ID (auto-generated if not provided)
-            state: Piece state (default: "idle")
             
         Returns:
             New Piece instance
@@ -41,7 +39,6 @@ class PieceFactory:
             color=color,
             kind=kind,
             cell=position,
-            state=state,
         )
     
     @classmethod
@@ -76,7 +73,6 @@ class PieceFactory:
             color=original_piece.color,
             position=position,
             piece_id=f"Q{original_piece.color[0].upper()}-{position.row}-{position.col}",
-            state=original_piece.state,
         )
     
     @classmethod
@@ -86,5 +82,5 @@ class PieceFactory:
 
 
 # Convenience function for backward compatibility
-def create_piece(kind: str, color: str, position: Position, piece_id: Optional[str] = None, state: str = "idle") -> Piece:
-    return PieceFactory.create(kind, color, position, piece_id, state)
+def create_piece(kind: str, color: str, position: Position, piece_id: Optional[str] = None) -> Piece:
+    return PieceFactory.create(kind, color, position, piece_id)
