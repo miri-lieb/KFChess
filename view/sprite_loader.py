@@ -11,6 +11,11 @@ from config import (
     REST_TICKS,
     SHORT_REST_TICKS,
     JUMP_TICKS,
+    STATE_IDLE,
+    STATE_MOVE,
+    STATE_JUMP,
+    STATE_SHORT_REST,
+    STATE_LONG_REST,
 )
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,9 +23,6 @@ ASSETS_DIR = os.path.join(SCRIPT_DIR, "assets")
 BOARD_PATH = os.path.join(ASSETS_DIR, "board.png")
 PIECE_SIZE = PIECE_SPRITE_SIZE
 BOARD_SIZE = BOARD_SPRITE_SIZE
-SHORT_REST_STATE = "short_rest"
-LONG_REST_STATE = "long_rest"
-
 SPRITE_CODES = ["PW", "PB", "RW", "RB", "NW", "NB", "BW", "BB", "QW", "QB", "KW", "KB"]
 SPRITE_PATHS = {
     code: os.path.join(ASSETS_DIR, "pieces_mine", f"{code[1]}{code[0]}", "states")
@@ -36,7 +38,7 @@ KIND_TO_SYMBOL = {
     "pawn": "P",
 }
 
-STATE_ORDER = ["idle", "move", "jump", SHORT_REST_STATE, LONG_REST_STATE]
+STATE_ORDER = [STATE_IDLE, STATE_MOVE, STATE_JUMP, STATE_SHORT_REST, STATE_LONG_REST]
 
 def load_sprite_frames(state_dir: str):
     frames = []
@@ -56,12 +58,12 @@ def load_sprites():
 
 def piece_state(position: Position, jump_timers, short_rest_timers, long_rest_timers) -> str:
     if position in jump_timers:
-        return "jump"
+        return STATE_JUMP
     if position in short_rest_timers:
-        return SHORT_REST_STATE
+        return STATE_SHORT_REST
     if position in long_rest_timers:
-        return LONG_REST_STATE
-    return "idle"
+        return STATE_LONG_REST
+    return STATE_IDLE
 
 def piece_sprite(sprites, piece, state: str, animation_tick: int):
     kind_code = KIND_TO_SYMBOL[piece.kind]

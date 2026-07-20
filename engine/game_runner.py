@@ -11,6 +11,8 @@ from config import (
     SHORT_REST_TICKS,
     JUMP_TICKS,
     PIECE_VALUES,
+    ROLE_BLACK,
+    ROLE_WHITE,
 )
 
 
@@ -21,7 +23,7 @@ class GameState:
     jump_timers: dict = field(default_factory=dict)
     move_log: list = field(default_factory=list)
     legal_moves: set = field(default_factory=set)
-    scores: dict = field(default_factory=lambda: {"white": 0, "black": 0})
+    scores: dict = field(default_factory=lambda: {ROLE_WHITE: 0, ROLE_BLACK: 0})
     start_time: float = field(default_factory=time.perf_counter)
     animation_tick: int = 0
     game_over: bool = False
@@ -55,7 +57,7 @@ class GameRunner:
             captured_piece = event["captured"]
             if captured_piece is not None:
                 value = PIECE_VALUES.get(captured_piece.kind, 0)
-                self.state.scores["black" if captured_piece.color == "white" else "white"] += value
+                self.state.scores[ROLE_BLACK if captured_piece.color == ROLE_WHITE else ROLE_WHITE] += value
             notation = self._move_notation(motion, captured_piece)
             self.state.move_log.append({
                 "color": motion.piece.color,

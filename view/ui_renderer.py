@@ -3,9 +3,19 @@ import numpy as np
 
 from .img import Img
 from .board_renderer import PANEL_WIDTH, TOP_MARGIN, BOTTOM_MARGIN
+from config import (
+    BOARD_FILE_NAMES,
+    DEFAULT_BOARD_HEIGHT,
+    GAME_OVER_TEXT,
+    PANEL_HEADER_MOVE,
+    PANEL_HEADER_TIME,
+    PANEL_TITLE_BLACK,
+    PANEL_TITLE_WHITE,
+    ROLE_BLACK,
+    ROLE_WHITE,
+)
 
 def _draw_border_labels(canvas_img, board_x, board_y, board_w, board_h):
-    files = "abcdefgh"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.8
     color = (20, 20, 20)
@@ -13,7 +23,7 @@ def _draw_border_labels(canvas_img, board_x, board_y, board_w, board_h):
     cell_w = board_w / 8
     cell_h = board_h / 8
 
-    for index, file_letter in enumerate(files):
+    for index, file_letter in enumerate(BOARD_FILE_NAMES):
         (text_w, text_h), _ = cv2.getTextSize(file_letter, font, font_scale, thickness)
         x = int(board_x + index * cell_w + cell_w / 2 - text_w / 2)
         top_y = int(board_y - 18)
@@ -21,8 +31,8 @@ def _draw_border_labels(canvas_img, board_x, board_y, board_w, board_h):
         cv2.putText(canvas_img, file_letter, (x, top_y), font, font_scale, color, thickness, cv2.LINE_AA)
         cv2.putText(canvas_img, file_letter, (x, bottom_y), font, font_scale, color, thickness, cv2.LINE_AA)
 
-    for index in range(8):
-        rank = str(8 - index)
+    for index in range(DEFAULT_BOARD_HEIGHT):
+        rank = str(DEFAULT_BOARD_HEIGHT - index)
         (text_w, text_h), _ = cv2.getTextSize(rank, font, font_scale, thickness)
         y = int(board_y + index * cell_h + cell_h / 2 + text_h / 2)
         left_x = int(board_x - 26)
@@ -46,8 +56,8 @@ def _draw_move_panel(canvas_img, origin_x, origin_y, width, title, entries):
     header_font = cv2.FONT_HERSHEY_SIMPLEX
     header_scale = 0.6
     header_thickness = 1
-    cv2.putText(canvas_img, "Time", (origin_x + 12, origin_y + 60), header_font, header_scale, border_color, header_thickness, cv2.LINE_AA)
-    cv2.putText(canvas_img, "Move", (origin_x + 100, origin_y + 60), header_font, header_scale, border_color, header_thickness, cv2.LINE_AA)
+    cv2.putText(canvas_img, PANEL_HEADER_TIME, (origin_x + 12, origin_y + 60), header_font, header_scale, border_color, header_thickness, cv2.LINE_AA)
+    cv2.putText(canvas_img, PANEL_HEADER_MOVE, (origin_x + 100, origin_y + 60), header_font, header_scale, border_color, header_thickness, cv2.LINE_AA)
 
     row_height = 30
     max_rows = min(len(entries), (panel_height - 90) // row_height)
@@ -73,13 +83,13 @@ def _draw_scores(canvas_img, board_x, board_y, board_w, scores):
     label_thickness = 2
     value_scale = 1.0
     value_thickness = 2
-    cv2.putText(canvas_img, f"Black: {scores['black']}", (x + 10, y + 25), font, label_scale, (0, 0, 0), label_thickness, cv2.LINE_AA)
-    cv2.putText(canvas_img, f"White: {scores['white']}", (x + 10, y + 50), font, value_scale, (0, 0, 0), value_thickness, cv2.LINE_AA)
+    cv2.putText(canvas_img, f"{PANEL_TITLE_BLACK}: {scores[ROLE_BLACK]}", (x + 10, y + 25), font, label_scale, (0, 0, 0), label_thickness, cv2.LINE_AA)
+    cv2.putText(canvas_img, f"{PANEL_TITLE_WHITE}: {scores[ROLE_WHITE]}", (x + 10, y + 50), font, value_scale, (0, 0, 0), value_thickness, cv2.LINE_AA)
 
 
 def _draw_game_over(canvas_img, board_x, board_y, board_w, board_h):
     font = cv2.FONT_HERSHEY_SIMPLEX
-    text = "GAME OVER"
+    text = GAME_OVER_TEXT
     scale = 2.0
     thickness = 4
     (text_w, text_h), _ = cv2.getTextSize(text, font, scale, thickness)
@@ -109,8 +119,8 @@ def compose_game_frame(board_frame: Img, move_log, scores, game_over=False):
     cv2.rectangle(canvas.img, (board_x - 2, board_y - 2), (board_x + board_w + 2, board_y + board_h + 2), (30, 30, 30), 3)
 
     _draw_scores(canvas.img, board_x, board_y, board_w, scores)
-    _draw_move_panel(canvas.img, 10, board_y, panel_width - 20, "Black", [m for m in move_log if m["color"] == "black"])
-    _draw_move_panel(canvas.img, board_x + board_w + 10, board_y, panel_width - 20, "White", [m for m in move_log if m["color"] == "white"])
+    _draw_move_panel(canvas.img, 10, board_y, panel_width - 20, PANEL_TITLE_BLACK, [m for m in move_log if m["color"] == ROLE_BLACK])
+    _draw_move_panel(canvas.img, board_x + board_w + 10, board_y, panel_width - 20, PANEL_TITLE_WHITE, [m for m in move_log if m["color"] == ROLE_WHITE])
 
     _draw_border_labels(canvas.img, board_x, board_y, board_w, board_h)
 

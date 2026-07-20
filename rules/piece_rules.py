@@ -1,5 +1,6 @@
 from typing import Set
 
+from config import ROLE_WHITE
 from model.board import BoardRepresentation
 from model.piece import Piece, ROOK, BISHOP, QUEEN, KNIGHT, KING, PAWN
 from model.position import Position
@@ -88,7 +89,7 @@ def _king_destinations(board: BoardRepresentation, piece: Piece):
 
 def _pawn_destinations(board: BoardRepresentation, piece: Piece):
     positions: Set[Position] = set()
-    forward = -1 if piece.color == "white" else 1
+    forward = -1 if piece.color == ROLE_WHITE else 1
     row = piece.cell.row
     col = piece.cell.col
     forward_pos = Position(row + forward, col)

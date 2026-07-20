@@ -2,6 +2,7 @@ from model.board import Board
 from model.piece import Piece, WHITE, BLACK, ROOK, KNIGHT, BISHOP, QUEEN, KING, PAWN
 from model.position import Position
 from model.piece_factory import PieceFactory
+from config import BLACK_START_ROWS, DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH
 from typing import List
 
 START_PIECES = [
@@ -16,14 +17,14 @@ START_PIECES = [
 ]
 
 def standard_starting_board() -> Board:
-    board = Board(8, 8)
+    board = Board(DEFAULT_BOARD_WIDTH, DEFAULT_BOARD_HEIGHT)
     # Top (row 0) is black, bottom (row 7) is white
-    for row in range(8):
-        for col in range(8):
+    for row in range(DEFAULT_BOARD_HEIGHT):
+        for col in range(DEFAULT_BOARD_WIDTH):
             code = START_PIECES[row][col]
             if code is None:
                 continue
-            if row <= 1:
+            if row < BLACK_START_ROWS:
                 color = BLACK
             else:
                 color = WHITE
@@ -36,14 +37,14 @@ def standard_starting_board() -> Board:
 def standard_starting_board_lines() -> List[str]:
     # returns the textual token lines matching game_io.parser token format: color letter then kind letter
     lines: List[str] = []
-    for row in range(8):
+    for row in range(DEFAULT_BOARD_HEIGHT):
         tokens: List[str] = []
-        for col in range(8):
+        for col in range(DEFAULT_BOARD_WIDTH):
             piece = START_PIECES[row][col]
             if piece is None:
                 tokens.append(".")
             else:
-                color = "b" if row <= 1 else "w"
+                color = "b" if row < BLACK_START_ROWS else "w"
                 tokens.append(f"{color}{piece}")
         lines.append(" ".join(tokens))
     return lines

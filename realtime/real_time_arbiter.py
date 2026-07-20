@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from config import ARBITER_INITIAL_ELAPSED_TIME_MS, ARBITER_INITIAL_ORDER_COUNTER
 from model.piece import Piece
 from model.position import Position
 from .motion import Motion
@@ -8,8 +9,8 @@ from .motion import Motion
 class RealTimeArbiter:
     def __init__(self):
         self.active_motions: List[Motion] = []
-        self.elapsed_time_ms = 0
-        self.order_counter = 0
+        self.elapsed_time_ms = ARBITER_INITIAL_ELAPSED_TIME_MS
+        self.order_counter = ARBITER_INITIAL_ORDER_COUNTER
 
     def has_active_motion(self) -> bool:
         return len(self.active_motions) > 0

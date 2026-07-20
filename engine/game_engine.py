@@ -1,6 +1,18 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from config import (
+    MESSAGE_GAME_OVER,
+    MESSAGE_MOVE_REQUESTED,
+    MESSAGE_MOVE_RESOLVED,
+    REASON_EMPTY_SOURCE,
+    REASON_GAME_OVER,
+    REASON_KING_CAPTURED,
+    REASON_OK,
+    REASON_PIECE_IN_FLIGHT,
+    REASON_WIN_CONDITION,
+    MOTION_SPEED_MS_PER_CELL,
+)
 from model.board import Board, BoardRepresentation
 from model.piece import Piece, PAWN, QUEEN, WHITE, BLACK
 from model.player import Player
@@ -13,7 +25,6 @@ from rules import (
     StandardPromotionService,
     PromotionResult,
 )
-from config import MOTION_SPEED_MS_PER_CELL
 from network.event_bus import InMemoryEventBus
 
 @dataclass
@@ -52,7 +63,7 @@ class GameEngine:
 
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         if self.game_over:
-            result = MoveResult(False, "game_over")
+            result = MoveResult(False, REASON_GAME_OVER)
             self._publisher.publish_move_requested(
                 source, destination, None, result, elapsed_time_ms=self.arbiter.elapsed_time_ms
             )
@@ -69,14 +80,14 @@ class GameEngine:
 
         piece = self.board.get_piece(source)
         if piece is None:
-            result = MoveResult(False, "empty_source")
+            result = MoveResult(False, REASON_EMPTY_SOURCE)
             self._publisher.publish_move_requested(
                 source, destination, None, result, elapsed_time_ms=self.arbiter.elapsed_time_ms
             )
             return result
 
         if self.arbiter.is_piece_in_flight(piece):
-            result = MoveResult(False, "piece_in_flight")
+            result = MoveResult(False, REASON_PIECE_IN_FLIGHT)
             self._publisher.publish_move_requested(
                 source, destination, piece, result, elapsed_time_ms=self.arbiter.elapsed_time_ms
             )
@@ -86,7 +97,7 @@ class GameEngine:
         duration_ms = max(1, distance * MOTION_SPEED_MS_PER_CELL)
 
         motion = self.arbiter.start_motion(piece, source, destination, duration_ms)
-        result = MoveResult(True, "ok")
+        result = MoveResult(True, REASON_OK)
         self._publisher.publish_move_requested(
             source, destination, piece, result, motion, self.arbiter.elapsed_time_ms
         )
@@ -117,7 +128,7 @@ class GameEngine:
     def check_win_condition(self):
         result = self._win_checker.check(self.board)
         if result:
-            self._mark_game_over(result.winner_color, "win_condition")
+            self._mark_game_over(result.winner_color, REASON_WIN_CONDITION)
         return result
 
     def _resolve_arrival(self, motion):
@@ -144,7 +155,7 @@ class GameEngine:
             if target is not None and target.color != attacker.color:
                 capturer = self.players.get(attacker.color)
                 if target.kind == "king":
-                    self._mark_game_over(attacker.color, "king_captured")
+                    self._mark_game_over(attacker.color, REASON_KING_CAPTURED)
                 self.board.remove_piece(destination)
                 captured = target
                 if capturer is not None:
@@ -214,7 +225,7 @@ class EventPublisher:
                 "finish_time_ms": motion.finish_time,
                 "return_to_fallback": motion.return_to_fallback
             }
-        self.event_bus.publish("move_requested", payload)
+        self.event_bus.publish(MESSAGE_MOVE_REQUESTED, payload)
 
     def publish_move_resolved(
         self,
@@ -269,12 +280,12 @@ class EventPublisher:
             "winner_color": None if winner is None else winner.color,
             "elapsed_time_ms": elapsed_time_ms,
         }
-        self.event_bus.publish("move_resolved", payload)
+        self.event_bus.publish(MESSAGE_MOVE_RESOLVED, payload)
 
     def publish_game_over(self, winner_color: Optional[str], reason: str) -> None:
         if self.event_bus is None:
             return
-        self.event_bus.publish("game_over", {
+        self.event_bus.publish(MESSAGE_GAME_OVER, {
             "winner_color": winner_color,
             "reason": reason
         })

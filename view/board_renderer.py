@@ -11,6 +11,7 @@ from .sprite_loader import (
     piece_sprite,
     piece_state,
 )
+from config import BOARD_FILE_NAMES, DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH, STATE_MOVE
 
 PANEL_WIDTH = 260
 TOP_MARGIN = 60
@@ -23,7 +24,7 @@ def board_origin():
     return PANEL_WIDTH, TOP_MARGIN
 
 def board_cell_size(board_img):
-    return board_img.shape[1] / 8, board_img.shape[0] / 8
+    return board_img.shape[1] / DEFAULT_BOARD_WIDTH, board_img.shape[0] / DEFAULT_BOARD_HEIGHT
 
 def cell_center(row: int, col: int, board_img, sprite_img):
     cell_w, cell_h = board_cell_size(board_img)
@@ -35,8 +36,8 @@ def draw_board(board, motions, sprites, animation_tick: int, long_rest_timers, s
     frame = board_image()
     moving_sources = {motion.source for motion in motions}
 
-    for row in range(8):
-        for col in range(8):
+    for row in range(DEFAULT_BOARD_HEIGHT):
+        for col in range(DEFAULT_BOARD_WIDTH):
             position = Position(row, col)
             if position in moving_sources:
                 continue
@@ -48,7 +49,7 @@ def draw_board(board, motions, sprites, animation_tick: int, long_rest_timers, s
             sprite.draw_on(frame, *cell_center(row, col, frame.img, sprite))
 
     for motion in motions:
-        sprite = piece_sprite(sprites, motion.piece, "move", animation_tick)
+        sprite = piece_sprite(sprites, motion.piece, STATE_MOVE, animation_tick)
         move_progress = motion.progress(current_time_ms)
         moving_start = cell_center(motion.source.row, motion.source.col, frame.img, sprite)
         moving_end = cell_center(motion.destination.row, motion.destination.col, frame.img, sprite)
@@ -64,8 +65,8 @@ def draw_legal_moves(frame: Img, legal_moves, board_img):
 
     overlay = frame.img.copy()
     board_h, board_w = board_img.shape[:2]
-    cell_w = board_w / 8
-    cell_h = board_h / 8
+    cell_w = board_w / DEFAULT_BOARD_WIDTH
+    cell_h = board_h / DEFAULT_BOARD_HEIGHT
 
     for position in legal_moves:
         x1 = int(position.col * cell_w)
@@ -81,8 +82,8 @@ def draw_rest_animation(frame: Img, long_rest_timers, short_rest_timers, jump_ti
         return
 
     board_h, board_w = board_img.shape[:2]
-    cell_w = board_w / 8
-    cell_h = board_h / 8
+    cell_w = board_w / DEFAULT_BOARD_WIDTH
+    cell_h = board_h / DEFAULT_BOARD_HEIGHT
     overlay = frame.img.copy()
     phase = (animation_tick % (max(1, 100 * 2))) / (100 * 2)
 
@@ -122,8 +123,8 @@ def draw_rest_animation(frame: Img, long_rest_timers, short_rest_timers, jump_ti
 def draw_selection(frame: Img, selected, board_img):
     if selected is None:
         return
-    cell_w = board_img.shape[1] / 8
-    cell_h = board_img.shape[0] / 8
+    cell_w = board_img.shape[1] / DEFAULT_BOARD_WIDTH
+    cell_h = board_img.shape[0] / DEFAULT_BOARD_HEIGHT
     row = selected.row
     col = selected.col
     x1 = int(col * cell_w)

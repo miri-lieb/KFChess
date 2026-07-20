@@ -5,14 +5,11 @@ from model.piece import Piece
 from model.position import Position
 from realtime.motion import Motion
 
-
 def position_to_dict(position: Position) -> dict[str, int]:
     return {"row": position.row, "col": position.col}
 
-
 def position_from_dict(payload: dict) -> Position:
     return Position(row=int(payload["row"]), col=int(payload["col"]))
-
 
 def piece_to_dict(piece: Piece) -> dict:
     return {
@@ -22,7 +19,6 @@ def piece_to_dict(piece: Piece) -> dict:
         "cell": position_to_dict(piece.cell),
     }
 
-
 def piece_from_dict(payload: dict) -> Piece:
     cell = position_from_dict(payload["cell"])
     return Piece(
@@ -31,7 +27,6 @@ def piece_from_dict(payload: dict) -> Piece:
         kind=payload["kind"],
         cell=cell,
     )
-
 
 def motion_to_dict(motion: Motion) -> dict:
     return {
@@ -45,7 +40,6 @@ def motion_to_dict(motion: Motion) -> dict:
         "return_to_fallback": motion.return_to_fallback,
     }
 
-
 def board_to_dict(board) -> dict:
     pieces = [
         piece_to_dict(piece)
@@ -56,7 +50,6 @@ def board_to_dict(board) -> dict:
     ]
     return {"width": board.width, "height": board.height, "pieces": pieces}
 
-
 def player_to_dict(player) -> dict:
     return {
         "color": player.color,
@@ -64,7 +57,6 @@ def player_to_dict(player) -> dict:
         "captured_piece_ids": [piece.id for piece in player.captured_pieces],
         "score": sum(PIECE_VALUES.get(piece.kind, 0) for piece in player.captured_pieces),
     }
-
 
 def snapshot_to_dict(engine) -> dict:
     return {
@@ -78,7 +70,6 @@ def snapshot_to_dict(engine) -> dict:
         "game_over": engine.game_over,
         "winner_color": None if engine.winner is None else engine.winner.color,
     }
-
 
 def motion_from_dict(payload: dict) -> Motion:
     return Motion(

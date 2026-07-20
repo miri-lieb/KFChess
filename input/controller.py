@@ -1,6 +1,7 @@
 from typing import Optional, Protocol
 from model.position import Position
 from model.board import BoardRepresentation
+from config import MESSAGE_MOVE_ACK, MESSAGE_LOGIN, MESSAGE_SNAPSHOT
 
 
 class EngineView(Protocol):

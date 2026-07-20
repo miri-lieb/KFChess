@@ -1,3 +1,4 @@
 [console_scripts]
+kfchess-gui = network.opencv_client:main
 kfchess-server = network.server_main:main
 kfchess-shell = network.shell_client:main

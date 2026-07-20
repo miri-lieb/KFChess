@@ -3,13 +3,25 @@ import cv2
 from engine.game_engine import GameEngine
 from input.controller import Controller
 from input.board_mapper import pixel_to_cell
+from model.piece import PAWN
 from model.position import Position
 from rules.piece_rules import legal_destinations
+from config import (
+    BOARD_FILE_NAMES,
+    DEFAULT_BOARD_WIDTH,
+    DEFAULT_BOARD_HEIGHT,
+    NOTATION_CAPTURE_SYMBOL,
+    PIECE_NOTATION_PREFIXES,
+    REASON_EMPTY_SOURCE,
+    REASON_OBSERVER_READ_ONLY,
+    REASON_WRONG_PLAYER_COLOR,
+    JUMP_TICKS,
+    SHORT_REST_TICKS,
+)
 
 def position_to_algebraic(position: Position) -> str:
-    file_names = "abcdefgh"
-    rank = 8 - position.row
-    return f"{file_names[position.col]}{rank}"
+    rank = DEFAULT_BOARD_HEIGHT - position.row
+    return f"{BOARD_FILE_NAMES[position.col]}{rank}"
 
 # board_pixel_to_position removed; use input.board_mapper.pixel_to_cell instead
 
@@ -20,13 +32,12 @@ def format_elapsed(seconds: float) -> str:
 
 def move_notation(piece, source: Position, destination: Position, target) -> str:
     dest_notation = position_to_algebraic(destination)
-    piece_map = {"king": "K", "queen": "Q", "rook": "R", "bishop": "B", "knight": "N"}
-    if piece.kind == "pawn":
-        prefix = "" if target is None else position_to_algebraic(source)[0] + "x"
+    if piece.kind == PAWN:
+        prefix = "" if target is None else position_to_algebraic(source)[0] + NOTATION_CAPTURE_SYMBOL
     else:
-        prefix = piece_map.get(piece.kind, "")
+        prefix = PIECE_NOTATION_PREFIXES.get(piece.kind, "")
         if target is not None:
-            prefix += "x"
+            prefix += NOTATION_CAPTURE_SYMBOL
     return f"{prefix}{dest_notation}"
 
 def on_mouse(event, x, y, flags, param):
@@ -49,7 +60,7 @@ def on_mouse(event, x, y, flags, param):
     # pixel_to_cell expects x,y relative to board origin; compute relative coords
     rel_x = x - board_x
     rel_y = y - board_y
-    position = pixel_to_cell(rel_x, rel_y, cell_size=board_w // 8)
+    position = pixel_to_cell(rel_x, rel_y, cell_size=board_w // DEFAULT_BOARD_WIDTH)
     if position is None:
         return
 
@@ -65,8 +76,8 @@ def on_mouse(event, x, y, flags, param):
             return
     if selected is not None and selected == position:
         if position not in jump_timers and position not in short_rest_timers and position not in rest_timers:
-            jump_timers[position] = param["jump_ticks"]
-            short_rest_timers[position] = param["short_rest_ticks"]
+            jump_timers[position] = JUMP_TICKS
+            short_rest_timers[position] = SHORT_REST_TICKS
         controller.selected = None
         return
 
@@ -74,6 +85,12 @@ def on_mouse(event, x, y, flags, param):
     if reason is None and controller.selected is not None:
         print(f"Selected piece at {controller.selected.row},{controller.selected.col}")
     elif reason is not None:
+        if reason == "wrong_player_color":
+            reason = REASON_WRONG_PLAYER_COLOR
+        elif reason == "observer_read_only":
+            reason = REASON_OBSERVER_READ_ONLY
+        elif reason == "empty_source":
+            reason = REASON_EMPTY_SOURCE
         print(f"click {x},{y} -> row={position.row},col={position.col}, reason={reason}")
 
     legal_moves = param["legal_moves"]

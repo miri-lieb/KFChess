@@ -5,13 +5,37 @@ from typing import Optional
 
 import websockets
 
-from config import TICK_DURATION_MS
+from config import (
+    DB_PATH,
+    MESSAGE_ERROR,
+    MESSAGE_GAME_OVER,
+    MESSAGE_GAME_STARTED,
+    MESSAGE_LOGIN,
+    MESSAGE_LOGIN_ACK,
+    MESSAGE_MOVE,
+    MESSAGE_MOVE_ACK,
+    MESSAGE_PLAYER_JOINED,
+    MESSAGE_PLAYER_LEFT,
+    MESSAGE_SNAPSHOT,
+    NETWORK_HOST,
+    NETWORK_PORT,
+    ROLE_OBSERVER,
+    REASON_EMPTY_SOURCE,
+    REASON_INVALID_JSON,
+    REASON_INVALID_MOVE_PAYLOAD,
+    REASON_LOGIN_REQUIRED,
+    REASON_OBSERVER_READ_ONLY,
+    REASON_UNKNOWN_MESSAGE_TYPE,
+    REASON_WRONG_PLAYER_COLOR,
+    TICK_DURATION_MS,
+)
 from engine.game_engine import GameEngine
 from model.setup import standard_starting_board
+from network.db import UserDB
+from network.elo import compute_elo
 from network.event_bus import GameEvent, InMemoryEventBus
-from network.lobby import LobbyError, PlayerSeat, ShellLoginLobby, OBSERVER
-from network.serialization import position_from_dict, snapshot_to_dict
-
+from network.lobby import LobbyError, PlayerSeat, ShellLoginLobby
+from network.serialization import engine_from_snapshot, position_from_dict, snapshot_to_dict
 
 class LocalWebSocketGameServer:
     def __init__(
@@ -19,13 +43,15 @@ class LocalWebSocketGameServer:
         engine: GameEngine,
         event_bus: InMemoryEventBus,
         lobby: Optional[ShellLoginLobby] = None,
-        host: str = "127.0.0.1",
-        port: int = 8765,
+        db: Optional[UserDB] = None,
+        host: str = NETWORK_HOST,
+        port: int = NETWORK_PORT,
         tick_duration_ms: int = TICK_DURATION_MS,
     ):
         self.engine = engine
         self.event_bus = event_bus
         self.lobby = lobby or ShellLoginLobby()
+        self.db = db
         self.host = host
         self.port = port
         self.tick_duration_ms = tick_duration_ms
@@ -36,6 +62,7 @@ class LocalWebSocketGameServer:
         self._sessions: dict[object, PlayerSeat] = {}
         self._game_started = False
         self.event_bus.subscribe(self._schedule_broadcast)
+        self.event_bus.subscribe(self._on_game_over, MESSAGE_GAME_OVER)
 
     async def __aenter__(self):
         await self.start()
@@ -78,6 +105,25 @@ class LocalWebSocketGameServer:
             }))
         )
 
+    def _on_game_over(self, event: GameEvent) -> None:
+        """Update ELO ratings when the game ends and save completed state."""
+        if self.db is not None:
+            self.db.save_game_state(snapshot_to_dict(self.engine))
+        if self.db is None:
+            return
+        winner_color = event.payload.get("winner_color")
+        if winner_color is None:
+            return
+        players = self.lobby.players()
+        if len(players) != 2:
+            return
+        winner = next((p for p in players if p.color == winner_color), None)
+        loser = next((p for p in players if p.color != winner_color), None)
+        if winner is None or loser is None:
+            return
+        new_winner_elo, new_loser_elo = compute_elo(winner.elo, loser.elo)
+        self.db.update_elos(winner.username, new_winner_elo, loser.username, new_loser_elo)
+
     async def _broadcast(self, message: dict) -> None:
         if not self._connections:
             return
@@ -108,52 +154,58 @@ class LocalWebSocketGameServer:
         try:
             message = json.loads(raw_message)
         except json.JSONDecodeError:
-            await websocket.send(json.dumps({"type": "error", "reason": "invalid_json"}))
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_INVALID_JSON}))
             return
 
         message_type = message.get("type")
         seat = self._sessions.get(websocket)
         if seat is None:
-            if message_type != "login":
-                await websocket.send(json.dumps({"type": "error", "reason": "login_required"}))
+            if message_type != MESSAGE_LOGIN:
+                await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
                 return
             await self._handle_login(websocket, message)
             return
 
-        if message_type == "move":
+        if message_type == MESSAGE_MOVE:
             await self._handle_move(websocket, seat, message)
             return
-        if message_type == "snapshot":
-            await websocket.send(json.dumps({"type": "snapshot", "payload": snapshot_to_dict(self.engine)}))
+        if message_type == MESSAGE_SNAPSHOT:
+            await websocket.send(json.dumps({"type": MESSAGE_SNAPSHOT, "payload": snapshot_to_dict(self.engine)}))
             return
-        await websocket.send(json.dumps({"type": "error", "reason": "unknown_message_type"}))
+        await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_UNKNOWN_MESSAGE_TYPE}))
 
     async def _handle_login(self, websocket, message: dict):
         username = str(message.get("username", ""))
+        password = str(message.get("password", ""))
+        register = bool(message.get("register", False))
         try:
-            seat = self.lobby.login(username)
+            if register:
+                seat = self.lobby.register(username, password)
+            else:
+                seat = self.lobby.login(username, password)
         except LobbyError as exc:
-            await websocket.send(json.dumps({"type": "error", "reason": str(exc)}))
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)}))
             await websocket.close()
             return
         self._sessions[websocket] = seat
         if seat.color is not None:
             self.engine.players[seat.color].name = seat.username
         await websocket.send(json.dumps({
-            "type": "login_ack",
+            "type": MESSAGE_LOGIN_ACK,
             "payload": {
                 "username": seat.username,
                 "role": seat.role,
                 "color": seat.color,
+                "elo": seat.elo,
                 "snapshot": snapshot_to_dict(self.engine),
             },
         }))
-        self.event_bus.publish("player_joined", {"username": seat.username, "role": seat.role, "color": seat.color})
+        self.event_bus.publish(MESSAGE_PLAYER_JOINED, {"username": seat.username, "role": seat.role, "color": seat.color})
         if self.lobby.is_ready() and not self._game_started:
             self._game_started = True
-            self.event_bus.publish("game_started", {
+            self.event_bus.publish(MESSAGE_GAME_STARTED, {
                 "players": [
-                    {"username": player.username, "role": player.role, "color": player.color}
+                    {"username": player.username, "role": player.role, "color": player.color, "elo": player.elo}
                     for player in self.lobby.players()
                 ],
                 "snapshot": snapshot_to_dict(self.engine),
@@ -164,23 +216,23 @@ class LocalWebSocketGameServer:
             source = position_from_dict(message["source"])
             destination = position_from_dict(message["destination"])
         except (KeyError, TypeError, ValueError):
-            await websocket.send(json.dumps({"type": "error", "reason": "invalid_move_payload"}))
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_INVALID_MOVE_PAYLOAD}))
             return
 
-        if seat.role == OBSERVER:
-            await websocket.send(json.dumps({"type": "move_ack", "payload": {"accepted": False, "reason": "observer_read_only"}}))
+        if seat.role == ROLE_OBSERVER:
+            await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_OBSERVER_READ_ONLY}}))
             return
         piece = self.engine.board.get_piece(source)
         if piece is None:
-            await websocket.send(json.dumps({"type": "move_ack", "payload": {"accepted": False, "reason": "empty_source"}}))
+            await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_EMPTY_SOURCE}}))
             return
         if piece.color != seat.color:
-            await websocket.send(json.dumps({"type": "move_ack", "payload": {"accepted": False, "reason": "wrong_player_color"}}))
+            await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_WRONG_PLAYER_COLOR}}))
             return
 
         result = self.engine.request_move(source, destination)
         await websocket.send(json.dumps({
-            "type": "move_ack",
+            "type": MESSAGE_MOVE_ACK,
             "payload": {
                 "accepted": result.is_accepted,
                 "reason": result.reason,
@@ -197,16 +249,29 @@ class LocalWebSocketGameServer:
             return
         if released.color is not None:
             self.engine.players[released.color].name = None
-        if released.role != OBSERVER:
+        if released.role != ROLE_OBSERVER:
             self._game_started = False
-        self.event_bus.publish("player_left", {
+            if self.db is not None and not self.engine.game_over:
+                self.db.save_game_state(snapshot_to_dict(self.engine))
+            # Reset engine once both players have left after a completed game
+            if self.engine.game_over and not self.lobby.players():
+                self.engine = GameEngine(standard_starting_board(), event_bus=self.event_bus)
+        self.event_bus.publish(MESSAGE_PLAYER_LEFT, {
             "username": released.username,
             "role": released.role,
             "color": released.color,
         })
 
 
-def create_local_server(host: str = "127.0.0.1", port: int = 8765) -> LocalWebSocketGameServer:
+def create_local_server(host: str = NETWORK_HOST, port: int = NETWORK_PORT) -> LocalWebSocketGameServer:
     event_bus = InMemoryEventBus()
-    engine = GameEngine(standard_starting_board(), event_bus=event_bus)
-    return LocalWebSocketGameServer(engine=engine, event_bus=event_bus, host=host, port=port)
+    db = UserDB(DB_PATH)
+    saved = db.load_game_state()
+    if saved is not None:
+        print("Restoring interrupted game state...")
+        engine = engine_from_snapshot(saved, event_bus=event_bus)
+    else:
+        engine = GameEngine(standard_starting_board(), event_bus=event_bus)
+    lobby = ShellLoginLobby(db=db)
+    return LocalWebSocketGameServer(engine=engine, event_bus=event_bus, lobby=lobby, db=db, host=host, port=port)
+

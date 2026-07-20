@@ -1,4 +1,4 @@
-from config import PIECE_VALUES
+from config import PIECE_VALUES, STATE_IDLE
 from model.piece import Piece
 from model.position import Position
 from realtime.motion import Motion
@@ -75,6 +75,7 @@ def piece_from_dict(payload: dict) -> Piece:
         color=payload["color"],
         kind=payload["kind"],
         cell=cell,
+        state=payload.get("state", STATE_IDLE),
     )
 
 
@@ -88,3 +89,27 @@ def motion_from_dict(payload: dict) -> Motion:
         start_time_ms=int(payload["start_time_ms"]),
         return_to_fallback=bool(payload.get("return_to_fallback", False)),
     )
+
+
+def engine_from_snapshot(snapshot: dict, event_bus=None):
+    """Reconstruct a GameEngine from a snapshot dict (e.g. loaded from DB)."""
+    from engine.game_engine import GameEngine
+    from model.board import Board
+    from realtime.real_time_arbiter import RealTimeArbiter
+
+    board_payload = snapshot["board"]
+    board = Board(board_payload["width"], board_payload["height"])
+    for piece_payload in board_payload["pieces"]:
+        piece = piece_from_dict(piece_payload)
+        board.add_piece(piece.cell, piece)
+
+    arbiter = RealTimeArbiter()
+    arbiter.elapsed_time_ms = int(snapshot.get("elapsed_time_ms", 0))
+    active_motions = [motion_from_dict(m) for m in snapshot.get("active_motions", [])]
+    arbiter.active_motions = active_motions
+    if active_motions:
+        arbiter.order_counter = max(m.order for m in active_motions)
+
+    engine = GameEngine(board, arbiter=arbiter, event_bus=event_bus)
+    engine.game_over = bool(snapshot.get("game_over", False))
+    return engine

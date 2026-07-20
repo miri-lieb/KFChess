@@ -4,7 +4,6 @@ from typing import Optional
 from model.piece import Piece, WHITE, BLACK, KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN
 from model.position import Position
 
-
 class PieceFactory:
     """Factory for creating pieces with consistent IDs and properties."""
     
@@ -79,7 +78,6 @@ class PieceFactory:
     def reset_counter(cls):
         """Reset the ID counter (useful for tests)."""
         cls._counter = 0
-
 
 # Convenience function for backward compatibility
 def create_piece(kind: str, color: str, position: Position, piece_id: Optional[str] = None) -> Piece:

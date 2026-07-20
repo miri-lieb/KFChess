@@ -2,7 +2,23 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from config import TICK_DURATION_MS, REST_TICKS
+from config import (
+    DEFAULT_BOARD_HEIGHT,
+    DEFAULT_BOARD_WIDTH,
+    MESSAGE_GAME_OVER,
+    MESSAGE_LOGIN_ACK,
+    MESSAGE_MOVE_REQUESTED,
+    MESSAGE_MOVE_RESOLVED,
+    MESSAGE_SNAPSHOT,
+    REASON_EMPTY_SOURCE,
+    REASON_OBSERVER_READ_ONLY,
+    REASON_OK,
+    REASON_WRONG_PLAYER_COLOR,
+    ROLE_BLACK,
+    ROLE_WHITE,
+    REST_TICKS,
+    TICK_DURATION_MS,
+)
 from model.board import Board
 from model.position import Position
 from network.serialization import motion_from_dict, piece_from_dict
@@ -18,7 +34,7 @@ class RemoteArbiterView:
 
 class RemoteEngineView:
     def __init__(self):
-        self.board = Board(8, 8)
+        self.board = Board(DEFAULT_BOARD_WIDTH, DEFAULT_BOARD_HEIGHT)
         self.arbiter = RemoteArbiterView()
         self.game_over = False
 
@@ -34,7 +50,7 @@ class RemoteGameState:
     jump_timers: dict = field(default_factory=dict)
     move_log: list = field(default_factory=list)
     legal_moves: set = field(default_factory=set)
-    scores: dict = field(default_factory=lambda: {"white": 0, "black": 0})
+    scores: dict = field(default_factory=lambda: {ROLE_WHITE: 0, ROLE_BLACK: 0})
     start_time: float = field(default_factory=time.perf_counter)
     game_over: bool = False
     animation_tick: int = 0
@@ -58,8 +74,8 @@ class RemoteGameState:
         self.game_over = engine.game_over
         players = payload.get("players", {})
         self.scores = {
-            "white": players.get("white", {}).get("score", 0),
-            "black": players.get("black", {}).get("score", 0),
+            ROLE_WHITE: players.get(ROLE_WHITE, {}).get("score", 0),
+            ROLE_BLACK: players.get(ROLE_BLACK, {}).get("score", 0),
         }
 
     def tick(self, engine: RemoteEngineView, tick_duration_ms: int = TICK_DURATION_MS) -> None:
@@ -74,15 +90,15 @@ class RemoteGameState:
     def apply_message(self, engine: RemoteEngineView, message: dict) -> None:
         message_type = message.get("type")
         payload = message.get("payload", {})
-        if message_type in {"login_ack", "snapshot", "game_started"} and "snapshot" in payload:
+        if message_type in {MESSAGE_LOGIN_ACK, MESSAGE_SNAPSHOT} and "snapshot" in payload:
             self.apply_snapshot(engine, payload["snapshot"])
-        elif message_type == "snapshot":
+        elif message_type == MESSAGE_SNAPSHOT:
             self.apply_snapshot(engine, payload)
-        elif message_type == "move_requested":
+        elif message_type == MESSAGE_MOVE_REQUESTED:
             self._apply_move_requested(engine, payload)
-        elif message_type == "move_resolved":
+        elif message_type == MESSAGE_MOVE_RESOLVED:
             self._apply_move_resolved(engine, payload)
-        elif message_type == "game_over":
+        elif message_type == MESSAGE_GAME_OVER:
             engine.game_over = True
             self.game_over = True
 
@@ -138,8 +154,8 @@ class RemoteGameState:
         players = payload.get("players")
         if players:
             self.scores = {
-                "white": players.get("white", {}).get("score", self.scores["white"]),
-                "black": players.get("black", {}).get("score", self.scores["black"]),
+                ROLE_WHITE: players.get(ROLE_WHITE, {}).get("score", self.scores[ROLE_WHITE]),
+                ROLE_BLACK: players.get(ROLE_BLACK, {}).get("score", self.scores[ROLE_BLACK]),
             }
         self.game_over = bool(payload.get("game_over", False))
         engine.game_over = self.game_over
@@ -161,9 +177,9 @@ class RemoteController:
         piece = self.engine.board.get_piece(position)
         if self.selected is None:
             if self.state.local_color is None:
-                return "observer_read_only"
+                return REASON_OBSERVER_READ_ONLY
             if piece is None or piece.color != self.state.local_color:
-                return "wrong_player_color"
+                return REASON_WRONG_PLAYER_COLOR
             self.selected = position
             return None
 
@@ -174,10 +190,10 @@ class RemoteController:
         selected_piece = self.engine.board.get_piece(self.selected)
         if selected_piece is None:
             self.selected = None
-            return "empty_source"
+            return REASON_EMPTY_SOURCE
         if selected_piece.color != self.state.local_color:
             self.selected = None
-            return "wrong_player_color"
+            return REASON_WRONG_PLAYER_COLOR
         self.send_move(self.selected, position)
         self.selected = None
-        return "ok"
+        return REASON_OK

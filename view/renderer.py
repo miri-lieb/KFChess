@@ -10,11 +10,12 @@ if ROOT_DIR not in sys.path:
 
 from engine.game_runner import GameRunner
 from view.board_renderer import board_image, board_origin, draw_board, draw_selection, draw_legal_moves, draw_rest_animation
-from view.sprite_loader import load_sprites, REST_TICKS, SHORT_REST_TICKS, JUMP_TICKS
+from view.sprite_loader import load_sprites
 from view.ui_renderer import compose_game_frame
 from view.board_setup import create_initial_board
 from view.input_handler import on_mouse, move_notation
 from view.interfaces import EngineView, ControllerView, Renderer, GameSnapshot
+from config import WINDOW_TITLE
 
 
 class OpenCVRenderer:
@@ -23,7 +24,7 @@ class OpenCVRenderer:
     def __init__(self):
         self.sprites = load_sprites()
         self.board_img = board_image()
-        self.window_name = "Chess Board"
+        self.window_name = WINDOW_TITLE
         cv2.namedWindow(self.window_name)
         self._mouse_param = None
 
@@ -40,8 +41,6 @@ class OpenCVRenderer:
             "start_time": state.start_time,
             "legal_moves": state.legal_moves,
             "board_origin": board_origin,
-            "short_rest_ticks": SHORT_REST_TICKS,
-            "jump_ticks": JUMP_TICKS,
         }
         cv2.setMouseCallback(self.window_name, on_mouse, self._mouse_param)
 
@@ -75,7 +74,6 @@ def format_elapsed(seconds: float) -> str:
     seconds_rem = seconds - minutes * 60
     return f"{minutes:02d}:{seconds_rem:05.2f}"
 
-
 def create_game():
     """Factory function to create engine and controller."""
     from engine.game_engine import GameEngine
@@ -84,7 +82,6 @@ def create_game():
     engine = GameEngine(board)
     controller = Controller(engine)
     return engine, controller
-
 
 def main():
     engine, controller = create_game()
@@ -97,9 +94,7 @@ def main():
         renderer.render(engine, controller, state)
         if not renderer.handle_input(controller, engine, state):
             raise KeyboardInterrupt()
-
     runner.run(render_callback)
-
 
 if __name__ == "__main__":
     main()
