@@ -88,7 +88,7 @@ async def _room_menu(websocket, username: str, password: str):
         print("2. Join existing room")
         print("3. List available rooms")
         print("4. Direct login (classic mode)")
-        choice = await asyncio.to_thread(input, "Choose [1-4]: ").strip()
+        choice = (await asyncio.to_thread(input, "Choose [1-4]: ")).strip()
         
         if choice == "1":
             await _create_room_flow(websocket, username)
