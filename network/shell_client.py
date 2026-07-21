@@ -73,11 +73,7 @@ async def _run_client(uri: str, username: str, password: str, register: bool):
 async def _run_rooms_client(uri: str, username: str, password: str):
     """Client with room selection menu."""
     async with websockets.connect(uri) as websocket:
-        printer = asyncio.create_task(_printer(websocket))
-        try:
-            await _room_menu(websocket, username, password)
-        finally:
-            printer.cancel()
+        await _room_menu(websocket, username, password)
 
 
 async def _room_menu(websocket, username: str, password: str):
@@ -128,20 +124,28 @@ async def _create_room_flow(websocket, username: str):
     
     # Wait for response
     print("Creating room...")
-    async for raw_message in websocket:
-        try:
-            message = json.loads(raw_message)
-            if message.get("type") == MESSAGE_ROOM_CREATED:
-                room_id = message["payload"]["room_id"]
-                print(f"\n✓ Room created! Room ID: {room_id}")
-                print("Share this ID with others to join")
+    try:
+        raw_message = await asyncio.wait_for(websocket.recv(), timeout=5)
+        message = json.loads(raw_message)
+        if message.get("type") == MESSAGE_ROOM_CREATED:
+            room_id = message["payload"]["room_id"]
+            print(f"\n✓ Room created! Room ID: {room_id}")
+            print("Share this ID with others to join")
+            # Start printer for game interaction
+            printer = asyncio.create_task(_printer(websocket))
+            try:
                 await _reader(websocket)
-                return
-            elif message.get("type") == "error":
-                print(f"Error: {message.get('reason')}")
-                return
-        except json.JSONDecodeError:
-            print(f"<< {raw_message}")
+            finally:
+                printer.cancel()
+            return
+        elif message.get("type") == "error":
+            print(f"Error: {message.get('reason')}")
+            return
+    except asyncio.TimeoutError:
+        print("Error: Server did not respond in time")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid response from server")
 
 
 async def _join_room_flow(websocket, username: str, password: str):
@@ -161,18 +165,26 @@ async def _join_room_flow(websocket, username: str, password: str):
     
     # Wait for response
     print("Joining room...")
-    async for raw_message in websocket:
-        try:
-            message = json.loads(raw_message)
-            if message.get("type") == MESSAGE_ROOM_JOINED:
-                print(f"✓ Joined room successfully!")
+    try:
+        raw_message = await asyncio.wait_for(websocket.recv(), timeout=5)
+        message = json.loads(raw_message)
+        if message.get("type") == MESSAGE_ROOM_JOINED:
+            print(f"✓ Joined room successfully as {message['payload']['role']}!")
+            # Start printer for game interaction
+            printer = asyncio.create_task(_printer(websocket))
+            try:
                 await _reader(websocket)
-                return
-            elif message.get("type") == "error":
-                print(f"Error: {message.get('reason')}")
-                return
-        except json.JSONDecodeError:
-            print(f"<< {raw_message}")
+            finally:
+                printer.cancel()
+            return
+        elif message.get("type") == "error":
+            print(f"Error: {message.get('reason')}")
+            return
+    except asyncio.TimeoutError:
+        print("Error: Server did not respond in time")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid response from server")
 
 
 async def _list_rooms_flow(websocket):
@@ -181,23 +193,26 @@ async def _list_rooms_flow(websocket):
         "type": MESSAGE_LIST_ROOMS,
     }))
     
-    async for raw_message in websocket:
-        try:
-            message = json.loads(raw_message)
-            if message.get("type") == MESSAGE_ROOMS_LIST:
-                rooms = message["payload"].get("rooms", [])
-                if not rooms:
-                    print("\nNo available rooms")
-                else:
-                    print("\n=== Available Rooms ===")
-                    for room in rooms:
-                        print(f"ID: {room['id']} | Name: {room['name']} | Creator: {room['creator']} | Players: {room.get('players', 0)}/2")
-                return
-            elif message.get("type") == "error":
-                print(f"Error: {message.get('reason')}")
-                return
-        except json.JSONDecodeError:
-            print(f"<< {raw_message}")
+    try:
+        raw_message = await asyncio.wait_for(websocket.recv(), timeout=5)
+        message = json.loads(raw_message)
+        if message.get("type") == MESSAGE_ROOMS_LIST:
+            rooms = message["payload"].get("rooms", [])
+            if not rooms:
+                print("\nNo available rooms")
+            else:
+                print("\n=== Available Rooms ===")
+                for room in rooms:
+                    print(f"ID: {room['id']} | Name: {room['name']} | Creator: {room['creator']} | Players: {room.get('players', 0)}/2")
+            return
+        elif message.get("type") == "error":
+            print(f"Error: {message.get('reason')}")
+            return
+    except asyncio.TimeoutError:
+        print("Error: Server did not respond in time")
+        return
+    except json.JSONDecodeError:
+        print(f"Error: Invalid response from server")
 
 
 def main():
