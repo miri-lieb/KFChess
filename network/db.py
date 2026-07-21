@@ -6,7 +6,7 @@ from typing import Optional
 
 from config import DB_PATH, ELO_DEFAULT
 from network.sql_query import UPDATE_USER, INSERT_GAME_STATE, GET_GAME_STATE, GET_ELO, GET_USER, INSERT_USER, \
-    CREATE_GAME_STATE, CREATE_USERS
+    CREATE_GAME_STATE, CREATE_USERS, CREATE_ROOMS, INSERT_ROOM, GET_ROOM, LIST_ROOMS, UPDATE_ROOM_STATUS
 
 
 class UserDBError(ValueError):
@@ -31,6 +31,7 @@ class UserDB:
         with self._conn() as conn:
             conn.execute(CREATE_USERS)
             conn.execute(CREATE_GAME_STATE)
+            conn.execute(CREATE_ROOMS)
 
     @staticmethod
     def _hash_password(password: str, salt: bytes) -> str:
@@ -90,3 +91,30 @@ class UserDB:
         if row is None or row["game_over"]:
             return None
         return json.loads(row["snapshot"])
+
+    def create_room(self, room_id: str, room_name: str, creator: str) -> None:
+        """Create a new room. Raises UserDBError if room ID already exists."""
+        try:
+            with self._conn() as conn:
+                conn.execute(INSERT_ROOM, (room_id, room_name, creator, "waiting"))
+        except sqlite3.IntegrityError:
+            raise UserDBError("Room ID already exists")
+
+    def get_room(self, room_id: str) -> "dict | None":
+        """Get room details by ID."""
+        with self._conn() as conn:
+            row = conn.execute(GET_ROOM, (room_id,)).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def list_available_rooms(self) -> list:
+        """Get all waiting rooms."""
+        with self._conn() as conn:
+            rows = conn.execute(LIST_ROOMS).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_room_status(self, room_id: str, status: str) -> None:
+        """Update room status (e.g., 'waiting' -> 'started' -> 'completed')."""
+        with self._conn() as conn:
+            conn.execute(UPDATE_ROOM_STATUS, (status, room_id))

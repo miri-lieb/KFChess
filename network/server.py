@@ -17,6 +17,12 @@ from config import (
     MESSAGE_PLAYER_JOINED,
     MESSAGE_PLAYER_LEFT,
     MESSAGE_SNAPSHOT,
+    MESSAGE_CREATE_ROOM,
+    MESSAGE_JOIN_ROOM,
+    MESSAGE_LIST_ROOMS,
+    MESSAGE_ROOM_CREATED,
+    MESSAGE_ROOM_JOINED,
+    MESSAGE_ROOMS_LIST,
     NETWORK_HOST,
     NETWORK_PORT,
     ROLE_OBSERVER,
@@ -27,6 +33,9 @@ from config import (
     REASON_OBSERVER_READ_ONLY,
     REASON_UNKNOWN_MESSAGE_TYPE,
     REASON_WRONG_PLAYER_COLOR,
+    REASON_ROOM_NOT_FOUND,
+    REASON_ROOM_FULL,
+    REASON_INVALID_ROOM_NAME,
     TICK_DURATION_MS,
 )
 from engine.game_engine import GameEngine
@@ -34,7 +43,7 @@ from model.setup import standard_starting_board
 from network.db import UserDB
 from network.elo import compute_elo
 from network.event_bus import GameEvent, InMemoryEventBus
-from network.lobby import LobbyError, PlayerSeat, ShellLoginLobby
+from network.lobby import LobbyError, PlayerSeat, ShellLoginLobby, RoomManager
 from network.serialization import engine_from_snapshot, position_from_dict, snapshot_to_dict
 
 class LocalWebSocketGameServer:
@@ -52,6 +61,7 @@ class LocalWebSocketGameServer:
         self.event_bus = event_bus
         self.lobby = lobby or ShellLoginLobby()
         self.db = db
+        self.room_manager = RoomManager(db)
         self.host = host
         self.port = port
         self.tick_duration_ms = tick_duration_ms
@@ -157,13 +167,23 @@ class LocalWebSocketGameServer:
             await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_INVALID_JSON}))
             return
 
-        message_type = message.get("type")
+        message_type = str(message.get("type", "")).strip().lower()
         seat = self._sessions.get(websocket)
+        
         if seat is None:
-            if message_type != MESSAGE_LOGIN:
-                await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
+            if message_type == MESSAGE_LOGIN:
+                await self._handle_login(websocket, message)
                 return
-            await self._handle_login(websocket, message)
+            if message_type == MESSAGE_CREATE_ROOM:
+                await self._handle_create_room(websocket, message)
+                return
+            if message_type == MESSAGE_JOIN_ROOM:
+                await self._handle_join_room(websocket, message)
+                return
+            if message_type == MESSAGE_LIST_ROOMS:
+                await self._handle_list_rooms(websocket, message)
+                return
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
             return
 
         if message_type == MESSAGE_MOVE:
@@ -238,6 +258,82 @@ class LocalWebSocketGameServer:
                 "reason": result.reason,
             },
         }))
+
+    async def _handle_create_room(self, websocket, message: dict):
+        """Handle room creation request."""
+        username = str(message.get("username", "")).strip()
+        room_name = str(message.get("room_name", "")).strip()
+        
+        if not username:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
+            return
+        
+        if not room_name or len(room_name) > 100:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_INVALID_ROOM_NAME}))
+            return
+        
+        try:
+            room_id = self.room_manager.create_room(room_name, username)
+            await websocket.send(json.dumps({
+                "type": MESSAGE_ROOM_CREATED,
+                "payload": {
+                    "room_id": room_id,
+                    "room_name": room_name,
+                }
+            }))
+        except Exception as exc:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)}))
+
+    async def _handle_join_room(self, websocket, message: dict):
+        """Handle room join request."""
+        username = str(message.get("username", "")).strip()
+        password = str(message.get("password", ""))
+        room_id = str(message.get("room_id", "")).strip().upper()
+        
+        if not username:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
+            return
+        
+        if not room_id:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_ROOM_NOT_FOUND}))
+            return
+        
+        try:
+            role, seat = self.room_manager.join_room(room_id, username, password)
+            self._sessions[websocket] = seat
+            if seat.color is not None:
+                self.engine.players[seat.color].name = seat.username
+            await websocket.send(json.dumps({
+                "type": MESSAGE_ROOM_JOINED,
+                "payload": {
+                    "room_id": room_id,
+                    "username": seat.username,
+                    "role": seat.role,
+                    "color": seat.color,
+                    "elo": seat.elo,
+                    "snapshot": snapshot_to_dict(self.engine),
+                }
+            }))
+            self.event_bus.publish(MESSAGE_PLAYER_JOINED, {
+                "username": seat.username,
+                "role": seat.role,
+                "color": seat.color,
+            })
+        except Exception as exc:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)}))
+
+    async def _handle_list_rooms(self, websocket, message: dict):
+        """List available rooms."""
+        try:
+            rooms = self.room_manager.list_rooms()
+            await websocket.send(json.dumps({
+                "type": MESSAGE_ROOMS_LIST,
+                "payload": {
+                    "rooms": rooms,
+                }
+            }))
+        except Exception as exc:
+            await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)}))
 
     def _disconnect_session(self, websocket) -> None:
         self._connections.discard(websocket)

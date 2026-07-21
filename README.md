@@ -79,3 +79,74 @@ If you want, I can:
   - `quit`
 
 The server publishes JSON events for `player_joined`, `game_started`, `move_requested`, `move_resolved`, and `game_over`.
+
+## Room System (NEW)
+
+The game now supports a room-based multiplayer system where players can create and join separate game rooms.
+
+### How to use:
+
+1. **Start the server**: `python3 -m network.server_main`
+2. **Connect with shell client**: `python3 -m network.shell_client`
+3. **Choose room mode** when prompted:
+   - Option 1: Use Room system (new)
+   - Option 2: Direct login (classic mode with single shared game)
+
+### Room Features:
+
+- **Create Room**: 
+  - Player enters a room name
+  - Server generates a unique 6-character room ID (e.g., `ABC123`)
+  - Room creator receives the ID to share with others
+
+- **Join Room**:
+  - Player enters the room ID they received
+  - Player joins the room as white (if available), black (if white is taken), or observer (if room is full)
+
+- **List Rooms**:
+  - View all available rooms
+  - See room name, creator, and player count
+  - Copy a room ID to join
+
+### Room Roles:
+
+Each room can have:
+- **Player 1 (White)**: First player to join
+- **Player 2 (Black)**: Second player to join
+- **Observers**: Up to 10 additional viewers (can watch but not play)
+
+### Example Workflow:
+
+```
+Player A (Alice):
+1. Starts shell client
+2. Selects "Create new room"
+3. Enters room name: "Championship Match"
+4. Gets room ID: "X3K7M9"
+5. Shares ID with Player B
+
+Player B (Bob):
+1. Starts shell client
+2. Selects "Join existing room"
+3. Enters room ID: "X3K7M9"
+4. Joins as Black player
+5. Game starts when both players are present
+```
+
+### Protocol (for API integration):
+
+Messages for room operations:
+
+```json
+// Create room
+{"type": "create_room", "username": "alice", "room_name": "Battle"}
+// Response: {"type": "room_created", "payload": {"room_id": "ABC123", "room_name": "Battle"}}
+
+// Join room
+{"type": "join_room", "username": "bob", "password": "", "room_id": "ABC123"}
+// Response: {"type": "room_joined", "payload": {"room_id": "ABC123", "role": "white", "color": "white"}}
+
+// List rooms
+{"type": "list_rooms"}
+// Response: {"type": "rooms_list", "payload": {"rooms": [...]}}
+```
