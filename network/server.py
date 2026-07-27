@@ -61,15 +61,17 @@ class LocalWebSocketGameServer:
         self.event_bus = event_bus
         self.lobby = lobby or ShellLoginLobby()
         self.db = db
-        self.room_manager = RoomManager(db)
+        self.room_manager = RoomManager(db, engine_factory=lambda bus: GameEngine(standard_starting_board(), event_bus=bus))
         self.host = host
         self.port = port
         self.tick_duration_ms = tick_duration_ms
         self._server = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._tick_task: Optional[asyncio.Task] = None
-        self._connections = set()
-        self._sessions: dict[object, PlayerSeat] = {}
+        self._connections = set()  # Classic-mode connections (not in any room)
+        self._room_connections: dict[str, set] = {}  # room_id -> set of websockets
+        self._subscribed_rooms: set[str] = set()  # rooms already subscribed to bus
+        self._sessions: dict[object, tuple] = {}  # websocket -> (PlayerSeat, room_id) mapping
         self._game_started = False
         self.event_bus.subscribe(self._schedule_broadcast)
         self.event_bus.subscribe(self._on_game_over, MESSAGE_GAME_OVER)
@@ -103,6 +105,12 @@ class LocalWebSocketGameServer:
                 return_exceptions=True,
             )
         self._connections.clear()
+        for conns in self._room_connections.values():
+            await asyncio.gather(
+                *(connection.close() for connection in list(conns)),
+                return_exceptions=True,
+            )
+        self._room_connections.clear()
         self._sessions.clear()
 
     def _schedule_broadcast(self, event: GameEvent) -> None:
@@ -147,10 +155,67 @@ class LocalWebSocketGameServer:
         for connection in stale:
             self._disconnect_session(connection)
 
+    def _subscribe_to_room(self, room_id: str) -> None:
+        """Subscribe to a room's event bus with a room-scoped broadcast handler."""
+        if room_id in self._subscribed_rooms:
+            return
+        room = self.room_manager.get_room(room_id)
+        if room is None or room.event_bus is None:
+            return
+        self._subscribed_rooms.add(room_id)
+
+        def room_broadcast(event: GameEvent) -> None:
+            if self._loop is None:
+                return
+            message = {"type": event.type, "payload": {**event.payload, "room_id": room_id}}
+            self._loop.call_soon_threadsafe(
+                lambda rid=room_id, msg=message: asyncio.create_task(self._broadcast_to_room(rid, msg))
+            )
+
+        room.event_bus.subscribe(room_broadcast)
+
+        def room_game_over(event: GameEvent) -> None:
+            if self.db is not None:
+                self.db.save_game_state(snapshot_to_dict(room.engine))
+            if self.db is None:
+                return
+            winner_color = event.payload.get("winner_color")
+            if winner_color is None:
+                return
+            if len(room.player_seats) != 2:
+                return
+            winner = next((p for p in room.player_seats if p.color == winner_color), None)
+            loser = next((p for p in room.player_seats if p.color != winner_color), None)
+            if winner is None or loser is None:
+                return
+            new_winner_elo, new_loser_elo = compute_elo(winner.elo, loser.elo)
+            self.db.update_elos(winner.username, new_winner_elo, loser.username, new_loser_elo)
+
+        room.event_bus.subscribe(room_game_over, MESSAGE_GAME_OVER)
+
+    async def _broadcast_to_room(self, room_id: str, message: dict) -> None:
+        """Broadcast a message only to connections in a specific room."""
+        connections = self._room_connections.get(room_id)
+        if not connections:
+            return
+        encoded = json.dumps(message)
+        stale = []
+        for connection in list(connections):
+            try:
+                await connection.send(encoded)
+            except Exception:
+                stale.append(connection)
+        for connection in stale:
+            self._room_connections.get(room_id, set()).discard(connection)
+            self._disconnect_session(connection)
+
     async def _tick_loop(self):
         while True:
             await asyncio.sleep(self.tick_duration_ms / 1000)
             self.engine.wait(self.tick_duration_ms)
+            for room in list(self.room_manager._rooms.values()):
+                if room.engine is not None:
+                    room.engine.wait(self.tick_duration_ms)
 
     async def _handle_connection(self, websocket):
         self._connections.add(websocket)
@@ -168,7 +233,17 @@ class LocalWebSocketGameServer:
             return
 
         message_type = str(message.get("type", "")).strip().lower()
-        seat = self._sessions.get(websocket)
+        session = self._sessions.get(websocket)
+        
+        # Extract seat and room_id from session
+        if session is None:
+            seat = None
+            room_id = None
+        elif isinstance(session, tuple):
+            seat, room_id = session
+        else:
+            seat = session
+            room_id = None
         
         if seat is None:
             if message_type == MESSAGE_LOGIN:
@@ -187,10 +262,15 @@ class LocalWebSocketGameServer:
             return
 
         if message_type == MESSAGE_MOVE:
-            await self._handle_move(websocket, seat, message)
+            await self._handle_move(websocket, seat, message, room_id)
             return
         if message_type == MESSAGE_SNAPSHOT:
-            await websocket.send(json.dumps({"type": MESSAGE_SNAPSHOT, "payload": snapshot_to_dict(self.engine)}))
+            engine = self.engine
+            if room_id:
+                room = self.room_manager.get_room(room_id)
+                if room and room.engine:
+                    engine = room.engine
+            await websocket.send(json.dumps({"type": MESSAGE_SNAPSHOT, "payload": snapshot_to_dict(engine)}))
             return
         await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_UNKNOWN_MESSAGE_TYPE}))
 
@@ -231,7 +311,7 @@ class LocalWebSocketGameServer:
                 "snapshot": snapshot_to_dict(self.engine),
             })
 
-    async def _handle_move(self, websocket, seat: PlayerSeat, message: dict):
+    async def _handle_move(self, websocket, seat: PlayerSeat, message: dict, room_id: Optional[str] = None):
         try:
             source = position_from_dict(message["source"])
             destination = position_from_dict(message["destination"])
@@ -239,10 +319,16 @@ class LocalWebSocketGameServer:
             await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_INVALID_MOVE_PAYLOAD}))
             return
 
+        engine = self.engine
+        if room_id:
+            room = self.room_manager.get_room(room_id)
+            if room and room.engine:
+                engine = room.engine
+
         if seat.role == ROLE_OBSERVER:
             await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_OBSERVER_READ_ONLY}}))
             return
-        piece = self.engine.board.get_piece(source)
+        piece = engine.board.get_piece(source)
         if piece is None:
             await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_EMPTY_SOURCE}}))
             return
@@ -250,7 +336,7 @@ class LocalWebSocketGameServer:
             await websocket.send(json.dumps({"type": MESSAGE_MOVE_ACK, "payload": {"accepted": False, "reason": REASON_WRONG_PLAYER_COLOR}}))
             return
 
-        result = self.engine.request_move(source, destination)
+        result = engine.request_move(source, destination)
         await websocket.send(json.dumps({
             "type": MESSAGE_MOVE_ACK,
             "payload": {
@@ -263,6 +349,7 @@ class LocalWebSocketGameServer:
         """Handle room creation request."""
         username = str(message.get("username", "")).strip()
         room_name = str(message.get("room_name", "")).strip()
+        password = str(message.get("password", ""))
         
         if not username:
             await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": REASON_LOGIN_REQUIRED}))
@@ -274,13 +361,31 @@ class LocalWebSocketGameServer:
         
         try:
             room_id = self.room_manager.create_room(room_name, username)
+            role, seat = self.room_manager.join_room(room_id, username, password)
+            room = self.room_manager.get_room(room_id)
+            self._sessions[websocket] = (seat, room_id)
+            self._connections.discard(websocket)
+            self._room_connections.setdefault(room_id, set()).add(websocket)
+            if seat.color is not None and room.engine:
+                room.engine.players[seat.color].name = seat.username
             await websocket.send(json.dumps({
                 "type": MESSAGE_ROOM_CREATED,
                 "payload": {
                     "room_id": room_id,
                     "room_name": room_name,
+                    "username": seat.username,
+                    "role": seat.role,
+                    "color": seat.color,
+                    "elo": seat.elo,
+                    "snapshot": snapshot_to_dict(room.engine) if room.engine else {},
                 }
             }))
+            self._subscribe_to_room(room_id)
+            room.event_bus.publish(MESSAGE_PLAYER_JOINED, {
+                "username": seat.username,
+                "role": seat.role,
+                "color": seat.color,
+            })
         except Exception as exc:
             await websocket.send(json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)}))
 
@@ -300,9 +405,12 @@ class LocalWebSocketGameServer:
         
         try:
             role, seat = self.room_manager.join_room(room_id, username, password)
-            self._sessions[websocket] = seat
-            if seat.color is not None:
-                self.engine.players[seat.color].name = seat.username
+            room = self.room_manager.get_room(room_id)
+            self._sessions[websocket] = (seat, room_id)
+            self._connections.discard(websocket)
+            self._room_connections.setdefault(room_id, set()).add(websocket)
+            if seat.color is not None and room.engine:
+                room.engine.players[seat.color].name = seat.username
             await websocket.send(json.dumps({
                 "type": MESSAGE_ROOM_JOINED,
                 "payload": {
@@ -311,10 +419,11 @@ class LocalWebSocketGameServer:
                     "role": seat.role,
                     "color": seat.color,
                     "elo": seat.elo,
-                    "snapshot": snapshot_to_dict(self.engine),
+                    "snapshot": snapshot_to_dict(room.engine) if room.engine else {},
                 }
             }))
-            self.event_bus.publish(MESSAGE_PLAYER_JOINED, {
+            self._subscribe_to_room(room_id)
+            room.event_bus.publish(MESSAGE_PLAYER_JOINED, {
                 "username": seat.username,
                 "role": seat.role,
                 "color": seat.color,
@@ -337,26 +446,52 @@ class LocalWebSocketGameServer:
 
     def _disconnect_session(self, websocket) -> None:
         self._connections.discard(websocket)
-        seat = self._sessions.pop(websocket, None)
-        if seat is None:
+        session = self._sessions.pop(websocket, None)
+        if session is None:
             return
-        released = self.lobby.release(seat.username)
-        if released is None:
-            return
-        if released.color is not None:
-            self.engine.players[released.color].name = None
-        if released.role != ROLE_OBSERVER:
-            self._game_started = False
-            if self.db is not None and not self.engine.game_over:
-                self.db.save_game_state(snapshot_to_dict(self.engine))
-            # Reset engine once both players have left after a completed game
-            if self.engine.game_over and not self.lobby.players():
-                self.engine = GameEngine(standard_starting_board(), event_bus=self.event_bus)
-        self.event_bus.publish(MESSAGE_PLAYER_LEFT, {
-            "username": released.username,
-            "role": released.role,
-            "color": released.color,
-        })
+        if isinstance(session, tuple):
+            seat, room_id = session
+            room_conns = self._room_connections.get(room_id)
+            if room_conns is not None:
+                room_conns.discard(websocket)
+        else:
+            seat = session
+            room_id = None
+
+        if room_id is not None:
+            # Room-mode disconnect
+            room = self.room_manager.get_room(room_id)
+            if room is not None:
+                if room.engine is not None and seat.color is not None:
+                    room.engine.players[seat.color].name = None
+                if seat.role != ROLE_OBSERVER and room.engine is not None:
+                    if self.db is not None and not room.engine.game_over:
+                        self.db.save_game_state(snapshot_to_dict(room.engine))
+            self.room_manager.leave_room(seat.username)
+            if room is not None:
+                room.event_bus.publish(MESSAGE_PLAYER_LEFT, {
+                    "username": seat.username,
+                    "role": seat.role,
+                    "color": seat.color,
+                })
+        else:
+            # Classic-mode disconnect
+            released = self.lobby.release(seat.username)
+            if released is None:
+                return
+            if released.color is not None:
+                self.engine.players[released.color].name = None
+            if released.role != ROLE_OBSERVER:
+                self._game_started = False
+                if self.db is not None and not self.engine.game_over:
+                    self.db.save_game_state(snapshot_to_dict(self.engine))
+                if self.engine.game_over and not self.lobby.players():
+                    self.engine = GameEngine(standard_starting_board(), event_bus=self.event_bus)
+            self.event_bus.publish(MESSAGE_PLAYER_LEFT, {
+                "username": released.username,
+                "role": released.role,
+                "color": released.color,
+            })
 
 
 def create_local_server(host: str = NETWORK_HOST, port: int = NETWORK_PORT) -> LocalWebSocketGameServer:

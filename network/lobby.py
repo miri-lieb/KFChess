@@ -1,6 +1,6 @@
 import unicodedata
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from config import (
@@ -12,6 +12,7 @@ from config import (
 )
 from model.piece import BLACK, WHITE
 from network.db import UserDB, UserDBError
+from network.event_bus import InMemoryEventBus
 
 OBSERVER = ROLE_OBSERVER
 
@@ -25,13 +26,15 @@ class PlayerSeat:
     color: Optional[str]
     elo: int = 1200
 
-@dataclass(frozen=True)
+@dataclass
 class Room:
     room_id: str
     name: str
     creator: str
     player_seats: list
     observer_seats: list
+    engine: any = None  # Per-room game engine
+    event_bus: InMemoryEventBus = field(default_factory=InMemoryEventBus)
 
 class ShellLoginLobby:
     def __init__(self, db: Optional[UserDB] = None):
@@ -108,10 +111,11 @@ class ShellLoginLobby:
 class RoomManager:
     """Manages multiple rooms, each with their own player/observer seats."""
 
-    def __init__(self, db: Optional[UserDB] = None):
+    def __init__(self, db: Optional[UserDB] = None, engine_factory=None):
         self._db = db
         self._rooms: dict[str, Room] = {}
         self._user_to_room: dict[str, str] = {}  # username -> room_id mapping
+        self._engine_factory = engine_factory  # Function(bus) -> engine
 
     def create_room(self, name: str, creator: str) -> str:
         """Create a new room and return its ID."""
@@ -122,12 +126,19 @@ class RoomManager:
             raise LobbyError(REASON_INVALID_ROOM_NAME)
         
         room_id = self._generate_room_id()
+        
+        # Each room gets its own event bus
+        room_bus = InMemoryEventBus()
+        engine = self._engine_factory(room_bus) if self._engine_factory else None
+        
         room = Room(
             room_id=room_id,
             name=normalized_name,
             creator=creator,
             player_seats=[],
-            observer_seats=[]
+            observer_seats=[],
+            engine=engine,
+            event_bus=room_bus,
         )
         self._rooms[room_id] = room
         
@@ -145,13 +156,16 @@ class RoomManager:
                 room_data = self._db.get_room(room_id)
                 if not room_data:
                     raise LobbyError(REASON_ROOM_NOT_FOUND)
-                # Load room from DB if it exists but not in memory
+                room_bus = InMemoryEventBus()
+                engine = self._engine_factory(room_bus) if self._engine_factory else None
                 room = Room(
                     room_id=room_data["id"],
                     name=room_data["name"],
                     creator=room_data["creator"],
                     player_seats=[],
-                    observer_seats=[]
+                    observer_seats=[],
+                    engine=engine,
+                    event_bus=room_bus,
                 )
                 self._rooms[room_id] = room
             else:

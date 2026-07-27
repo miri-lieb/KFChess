@@ -9,6 +9,8 @@ from config import (
     MESSAGE_LOGIN_ACK,
     MESSAGE_MOVE_REQUESTED,
     MESSAGE_MOVE_RESOLVED,
+    MESSAGE_ROOM_CREATED,
+    MESSAGE_ROOM_JOINED,
     MESSAGE_SNAPSHOT,
     REASON_EMPTY_SOURCE,
     REASON_OBSERVER_READ_ONLY,
@@ -57,6 +59,7 @@ class RemoteGameState:
     local_role: Optional[str] = None
     local_color: Optional[str] = None
     username: Optional[str] = None
+    current_room_id: Optional[str] = None
 
     def apply_snapshot(self, engine: RemoteEngineView, payload: dict) -> None:
         board_payload = payload["board"]
@@ -90,8 +93,17 @@ class RemoteGameState:
     def apply_message(self, engine: RemoteEngineView, message: dict) -> None:
         message_type = message.get("type")
         payload = message.get("payload", {})
-        if message_type in {MESSAGE_LOGIN_ACK, MESSAGE_SNAPSHOT} and "snapshot" in payload:
+        # Client-side defense: ignore messages for a different room
+        if self.current_room_id is not None and message_type not in {
+            MESSAGE_LOGIN_ACK, MESSAGE_SNAPSHOT,
+        }:
+            msg_room_id = payload.get("room_id")
+            if msg_room_id is not None and msg_room_id != self.current_room_id:
+                return
+        if message_type in {MESSAGE_LOGIN_ACK, MESSAGE_ROOM_CREATED, MESSAGE_ROOM_JOINED, MESSAGE_SNAPSHOT} and "snapshot" in payload:
             self.apply_snapshot(engine, payload["snapshot"])
+            if message_type in {MESSAGE_ROOM_CREATED, MESSAGE_ROOM_JOINED}:
+                self.current_room_id = payload.get("room_id")
         elif message_type == MESSAGE_SNAPSHOT:
             self.apply_snapshot(engine, payload)
         elif message_type == MESSAGE_MOVE_REQUESTED:
