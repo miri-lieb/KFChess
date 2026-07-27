@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  server:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      - NETWORK_HOST=0.0.0.0
+      - NETWORK_PORT=8765
+      - DB_PATH=/data/kfchess.db
+    volumes:
+      - db_data:/data
+    depends_on:
+      - redis
+      - postgres
+      - nats
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=kfchess
+      - POSTGRES_PASSWORD=kfchess
+      - POSTGRES_DB=kfchess
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+volumes:
+  db_data:
+  redis_data:
+  pg_data:
