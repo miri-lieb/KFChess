@@ -21,7 +21,7 @@ from config import (
     REASON_WRONG_PLAYER_COLOR,
     ROLE_OBSERVER,
 )
-from network.events import subscribe_room_events
+from network.events import broadcast_room, subscribe_room_events
 from network.serialization import position_from_dict, snapshot_to_dict
 
 logger = logging.getLogger(__name__)
@@ -175,6 +175,22 @@ async def handle_create_room(server, websocket, message):
             "role": seat.role,
             "color": seat.color,
         })
+        if room is not None and len(room.player_seats) == 2:
+            await broadcast_room(server, room_id, {
+                "type": MESSAGE_GAME_STARTED,
+                "payload": {
+                    "players": [
+                        {
+                            "username": s.username,
+                            "role": s.role,
+                            "color": s.color,
+                            "elo": s.elo,
+                        }
+                        for s in room.player_seats
+                    ],
+                    "snapshot": snapshot_to_dict(room.engine) if room.engine else {},
+                },
+            })
     except Exception as exc:
         await websocket.send(
             json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)})
@@ -223,6 +239,22 @@ async def handle_join_room(server, websocket, message):
             "role": seat.role,
             "color": seat.color,
         })
+        if room is not None and len(room.player_seats) == 2:
+            await broadcast_room(server, room_id, {
+                "type": MESSAGE_GAME_STARTED,
+                "payload": {
+                    "players": [
+                        {
+                            "username": s.username,
+                            "role": s.role,
+                            "color": s.color,
+                            "elo": s.elo,
+                        }
+                        for s in room.player_seats
+                    ],
+                    "snapshot": snapshot_to_dict(room.engine) if room.engine else {},
+                },
+            })
     except Exception as exc:
         await websocket.send(
             json.dumps({"type": MESSAGE_ERROR, "reason": str(exc)})

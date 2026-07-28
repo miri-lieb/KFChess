@@ -24,6 +24,7 @@ class GameState:
     move_log: list = field(default_factory=list)
     legal_moves: set = field(default_factory=set)
     scores: dict = field(default_factory=lambda: {ROLE_WHITE: 0, ROLE_BLACK: 0})
+    player_names: dict = field(default_factory=dict)
     start_time: float = field(default_factory=time.perf_counter)
     animation_tick: int = 0
     game_over: bool = False
@@ -38,6 +39,10 @@ class GameRunner:
 
     def run(self, renderer: Optional[Callable] = None):
         """Main game loop. If renderer is provided, call it each frame."""
+        self.state.player_names = {
+            ROLE_WHITE: self.engine.players[ROLE_WHITE].name,
+            ROLE_BLACK: self.engine.players[ROLE_BLACK].name,
+        }
         try:
             while True:
                 self.tick()

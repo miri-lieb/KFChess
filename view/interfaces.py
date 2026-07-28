@@ -1,7 +1,7 @@
 """View layer interfaces (Protocols) for decoupling the renderer from game logic."""
 
 from typing import Protocol, Optional, Set, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from model.position import Position
 from model.board import BoardRepresentation
 from model.piece import Piece
@@ -19,6 +19,8 @@ class GameSnapshot:
     scores: dict
     game_over: bool
     animation_tick: int
+    player_names: dict = field(default_factory=dict)
+    waiting_for_opponent: bool = False
 
 
 class EngineView(Protocol):

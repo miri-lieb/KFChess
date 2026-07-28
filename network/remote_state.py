@@ -6,6 +6,7 @@ from config import (
     DEFAULT_BOARD_HEIGHT,
     DEFAULT_BOARD_WIDTH,
     MESSAGE_GAME_OVER,
+    MESSAGE_GAME_STARTED,
     MESSAGE_LOGIN_ACK,
     MESSAGE_MOVE_REQUESTED,
     MESSAGE_MOVE_RESOLVED,
@@ -25,7 +26,6 @@ from model.board import Board
 from model.position import Position
 from network.serialization import motion_from_dict, piece_from_dict
 from realtime.motion import Motion
-from view.input_handler import move_notation
 
 
 class RemoteArbiterView:
@@ -53,6 +53,7 @@ class RemoteGameState:
     move_log: list = field(default_factory=list)
     legal_moves: set = field(default_factory=set)
     scores: dict = field(default_factory=lambda: {ROLE_WHITE: 0, ROLE_BLACK: 0})
+    player_names: dict = field(default_factory=dict)
     start_time: float = field(default_factory=time.perf_counter)
     game_over: bool = False
     animation_tick: int = 0
@@ -60,6 +61,7 @@ class RemoteGameState:
     local_color: Optional[str] = None
     username: Optional[str] = None
     current_room_id: Optional[str] = None
+    waiting_for_opponent: bool = True
 
     def apply_snapshot(self, engine: RemoteEngineView, payload: dict) -> None:
         board_payload = payload["board"]
@@ -80,6 +82,12 @@ class RemoteGameState:
             ROLE_WHITE: players.get(ROLE_WHITE, {}).get("score", 0),
             ROLE_BLACK: players.get(ROLE_BLACK, {}).get("score", 0),
         }
+        self.player_names = {
+            ROLE_WHITE: players.get(ROLE_WHITE, {}).get("name"),
+            ROLE_BLACK: players.get(ROLE_BLACK, {}).get("name"),
+        }
+        if self.waiting_for_opponent and self.player_names.get(ROLE_WHITE) and self.player_names.get(ROLE_BLACK):
+            self.waiting_for_opponent = False
 
     def tick(self, engine: RemoteEngineView, tick_duration_ms: int = TICK_DURATION_MS) -> None:
         engine.arbiter.elapsed_time_ms += tick_duration_ms
@@ -110,6 +118,15 @@ class RemoteGameState:
             self._apply_move_requested(engine, payload)
         elif message_type == MESSAGE_MOVE_RESOLVED:
             self._apply_move_resolved(engine, payload)
+        elif message_type == MESSAGE_GAME_STARTED:
+            self.waiting_for_opponent = False
+            players = payload.get("players", [])
+            for p in players:
+                color = p.get("color")
+                if color in (ROLE_WHITE, ROLE_BLACK):
+                    self.player_names[color] = p.get("username")
+            if "snapshot" in payload:
+                self.apply_snapshot(engine, payload["snapshot"])
         elif message_type == MESSAGE_GAME_OVER:
             engine.game_over = True
             self.game_over = True
@@ -127,6 +144,8 @@ class RemoteGameState:
         engine.arbiter.active_motions.append(motion)
 
     def _apply_move_resolved(self, engine: RemoteEngineView, payload: dict) -> None:
+        self.waiting_for_opponent = False
+        from view.notation import move_notation
         engine.arbiter.elapsed_time_ms = int(payload.get("elapsed_time_ms", engine.arbiter.elapsed_time_ms))
         motion = motion_from_dict(payload["motion"])
         engine.arbiter.active_motions = [

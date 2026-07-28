@@ -14,7 +14,7 @@ from .sprite_loader import (
 from config import BOARD_FILE_NAMES, DEFAULT_BOARD_HEIGHT, DEFAULT_BOARD_WIDTH, STATE_MOVE
 
 PANEL_WIDTH = 260
-TOP_MARGIN = 60
+TOP_MARGIN = 90
 BOTTOM_MARGIN = 40
 
 def board_image():

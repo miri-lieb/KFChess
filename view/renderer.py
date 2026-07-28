@@ -58,7 +58,11 @@ class OpenCVRenderer:
         draw_rest_animation(frame, state.rest_timers, state.short_rest_timers, state.jump_timers, self.board_img.img, state.animation_tick)
         draw_legal_moves(frame, state.legal_moves, self.board_img.img)
         draw_selection(frame, controller.selected, self.board_img.img)
-        composed = compose_game_frame(frame, state.move_log, state.scores, state.game_over)
+        composed = compose_game_frame(
+            frame, state.move_log, state.scores, state.game_over,
+            getattr(state, 'player_names', None),
+            getattr(state, 'waiting_for_opponent', False),
+        )
         cv2.imshow(self.window_name, composed.img)
 
     def handle_input(self, controller: ControllerView, engine: EngineView, state: GameSnapshot) -> bool:
