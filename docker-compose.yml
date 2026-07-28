@@ -8,20 +8,15 @@ services:
     environment:
       - NETWORK_HOST=0.0.0.0
       - NETWORK_PORT=8765
-      - DB_PATH=/data/kfchess.db
-    volumes:
-      - db_data:/data
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_USER=kfchess
+      - PG_PASSWORD=kfchess
+      - PG_DATABASE=kfchess
+      - NATS_URL=nats://nats:4222
     depends_on:
-      - redis
       - postgres
       - nats
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
 
   postgres:
     image: postgres:16-alpine
@@ -39,7 +34,6 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
+
 volumes:
-  db_data:
-  redis_data:
   pg_data:

@@ -45,8 +45,19 @@ WINDOW_TITLE = "Chess Board"
 NETWORK_HOST = "127.0.0.1"
 NETWORK_PORT = 8765
 
-# Database
+# PostgreSQL
 import os as _os
+PG_HOST = _os.environ.get("PG_HOST", "127.0.0.1")
+PG_PORT = int(_os.environ.get("PG_PORT", "5432"))
+PG_USER = _os.environ.get("PG_USER", "kfchess")
+PG_PASSWORD = _os.environ.get("PG_PASSWORD", "kfchess")
+PG_DATABASE = _os.environ.get("PG_DATABASE", "kfchess")
+PG_DSN = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+
+# NATS
+NATS_URL = _os.environ.get("NATS_URL", "nats://127.0.0.1:4222")
+
+# Legacy SQLite path (kept for migration reference)
 DB_PATH = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kfchess.db")
 
 # ELO

@@ -36,6 +36,7 @@ network/serializer.py
 network/server.py
 network/server_main.py
 network/shell_client.py
+network/sql_query.py
 realtime/__init__.py
 realtime/motion.py
 realtime/real_time_arbiter.py
