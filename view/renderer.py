@@ -13,7 +13,7 @@ from view.board_renderer import board_image, board_origin, draw_board, draw_sele
 from view.sprite_loader import load_sprites
 from view.ui_renderer import compose_game_frame
 from view.board_setup import create_initial_board
-from view.input_handler import on_mouse, move_notation
+from view.input_handler import on_mouse
 from view.interfaces import EngineView, ControllerView, Renderer, GameSnapshot
 from config import WINDOW_TITLE
 
@@ -68,11 +68,6 @@ class OpenCVRenderer:
     def cleanup(self):
         cv2.destroyAllWindows()
 
-
-def format_elapsed(seconds: float) -> str:
-    minutes = int(seconds // 60)
-    seconds_rem = seconds - minutes * 60
-    return f"{minutes:02d}:{seconds_rem:05.2f}"
 
 def create_game():
     """Factory function to create engine and controller."""

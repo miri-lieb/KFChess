@@ -56,10 +56,10 @@ class UserDB:
         return dk.hex()
 
     async def create_user(self, username: str, password: str) -> int:
-        from config import REASON_USER_EXISTS
+        from config import REASON_USER_EXISTS, ELO_DEFAULT
 
         if self._pool is None:
-            raise UserDBError("Database unavailable")
+            return ELO_DEFAULT
         salt = os.urandom(32)
         pw_hash = self._hash_password(password, salt)
         try:
@@ -70,10 +70,10 @@ class UserDB:
         return ELO_DEFAULT
 
     async def authenticate(self, username: str, password: str) -> int:
-        from config import REASON_INVALID_CREDENTIALS
+        from config import ELO_DEFAULT, REASON_INVALID_CREDENTIALS
 
         if self._pool is None:
-            raise UserDBError("Database unavailable")
+            return ELO_DEFAULT
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(GET_USER, username)
         if row is None:

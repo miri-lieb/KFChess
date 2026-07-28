@@ -1,10 +1,11 @@
 import asyncio
-import getpass
 import json
 import queue
 import sys
 import threading
 import time
+
+import cv2
 
 from config import (
     CONNECTED_AS_TEMPLATE,
@@ -22,15 +23,14 @@ from config import (
     MOVE_REJECTED_PREFIX,
     NETWORK_HOST,
     NETWORK_PORT,
-    PASSWORD_PROMPT,
-    ROOM_ID_PROMPT,
-    ROOM_NAME_PROMPT,
     SERVER_ERROR_PREFIX,
     TICK_DURATION_MS,
-    USERNAME_PROMPT,
+    WINDOW_TITLE,
 )
 from model.position import Position
 from network.remote_state import RemoteController, RemoteEngineView, RemoteGameState
+from view.auth_renderer import AuthInput, create_auth_canvas, render_auth_screen
+from view.lobby_renderer import LobbyState, create_lobby_canvas, render_lobby_screen
 from view.renderer import OpenCVRenderer
 
 import websockets
@@ -108,77 +108,164 @@ def wait_for_response(bridge: NetworkBridge, expected_types: set[str], timeout_s
     return None
 
 
-def main():
-    username = input(USERNAME_PROMPT).strip()
-    password = getpass.getpass(PASSWORD_PROMPT)
+def _run_auth_screen(bridge: NetworkBridge) -> tuple[str, str] | None:
+    """Run the OpenCV auth screen. Returns (username, password) on success, None to quit."""
+    window_name = WINDOW_TITLE
+    cv2.namedWindow(window_name)
 
-    bridge = NetworkBridge(f"ws://{NETWORK_HOST}:{NETWORK_PORT}")
-    bridge.start()
+    auth_input = AuthInput()
+    canvas = create_auth_canvas()
 
-    entry_result = None
+    while True:
+        render_auth_screen(canvas, auth_input)
+        cv2.imshow(window_name, canvas)
+        key = cv2.waitKey(50)
+        auth_input.handle_key(key)
 
-    while entry_result is None:
-        print("\n=== Room Menu ===")
-        print("1. Create new room")
-        print("2. Join existing room")
-        print("3. List available rooms")
-        print("4. Direct login (classic mode)")
-        choice = input("Choose [1-4]: ").strip()
-
-        if choice == "1":
-            room_name = input(ROOM_NAME_PROMPT).strip()
-            if not room_name or room_name.lower() == "exit":
-                continue
-            bridge.send_message({
-                "type": MESSAGE_CREATE_ROOM,
-                "username": username,
-                "password": password,
-                "room_name": room_name,
-            })
-            print("Creating room...")
-            entry_result = wait_for_response(bridge, {MESSAGE_ROOM_CREATED})
-
-        elif choice == "2":
-            room_id = input(ROOM_ID_PROMPT).strip().upper()
-            if not room_id or room_id.lower() == "exit":
-                continue
-            bridge.send_message({
-                "type": MESSAGE_JOIN_ROOM,
-                "username": username,
-                "password": password,
-                "room_id": room_id,
-            })
-            print("Joining room...")
-            entry_result = wait_for_response(bridge, {MESSAGE_ROOM_JOINED})
-
-        elif choice == "3":
-            bridge.send_message({
-                "type": MESSAGE_LIST_ROOMS,
-            })
-            response = wait_for_response(bridge, {MESSAGE_ROOMS_LIST})
-            if response:
-                rooms = response.get("payload", {}).get("rooms", [])
-                if not rooms:
-                    print("\nNo available rooms.")
-                else:
-                    print("\n=== Available Rooms ===")
-                    for room in rooms:
-                        print(f"ID: {room['id']} | Name: {room['name']} | Creator: {room['creator']} | Players: {room.get('players', 0)}/2")
-
-        elif choice == "4":
-            action = input("New user? Register [r] / Login [l]: ").strip().lower()
-            register = action == "r"
+        data = auth_input.consume_submit()
+        if data is not None:
+            tab, username, password = data
+            is_register = tab == "register"
             bridge.send_message({
                 "type": MESSAGE_LOGIN,
                 "username": username,
                 "password": password,
-                "register": register,
+                "register": is_register,
             })
-            print("Logging in...")
-            entry_result = wait_for_response(bridge, {MESSAGE_LOGIN_ACK})
+            deadline = time.time() + 5.0
+            response = None
+            while time.time() < deadline:
+                for message in bridge.drain_messages():
+                    msg_type = message.get("type")
+                    if msg_type == MESSAGE_LOGIN_ACK:
+                        response = message
+                        break
+                    if msg_type == MESSAGE_ERROR:
+                        reason = message.get("reason", "unknown")
+                        friendly = {
+                            "invalid_credentials": "Invalid username or password",
+                            "user_already_exists": "Username already taken",
+                            "username_required": "Username is required",
+                        }.get(reason, reason)
+                        auth_input.set_error(friendly)
+                        break
+                if response is not None:
+                    break
+                time.sleep(0.05)
 
-        else:
-            print("Invalid choice")
+            if response is not None:
+                cv2.destroyWindow(window_name)
+                return username, password
+
+            if not auth_input.error_msg:
+                auth_input.set_error("Server did not respond")
+
+        if key == 27 and not auth_input.username and not auth_input.password:
+            break
+
+    cv2.destroyWindow(window_name)
+    return None
+
+
+def _run_lobby_screen(bridge: NetworkBridge, username: str, password: str) -> dict | None:
+    window_name = WINDOW_TITLE
+    cv2.namedWindow(window_name)
+
+    lobby = LobbyState()
+    lobby.username = username
+    canvas = create_lobby_canvas()
+
+    click_pos = []
+
+    def mouse_callback(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            click_pos.append((x, y))
+
+    cv2.setMouseCallback(window_name, mouse_callback)
+
+    def refresh_rooms():
+        bridge.send_message({"type": MESSAGE_LIST_ROOMS})
+
+    refresh_rooms()
+
+    while True:
+        # Handle mouse clicks
+        while click_pos:
+            mx, my = click_pos.pop(0)
+            action = lobby.handle_click(mx, my)
+            if action is not None:
+                atype, avalue = action
+                lobby.set_waiting(atype)
+                send_map = {
+                    "create": (MESSAGE_CREATE_ROOM, {"room_name": avalue}),
+                    "join_id": (MESSAGE_JOIN_ROOM, {"room_id": avalue}),
+                    "join_room": (MESSAGE_JOIN_ROOM, {"room_id": avalue}),
+                }
+                msg_type, extra = send_map[atype]
+                bridge.send_message({
+                    "type": msg_type, "username": username,
+                    "password": password, **extra,
+                })
+
+        # Drain incoming messages
+        for message in bridge.drain_messages():
+            msg_type = message.get("type")
+            if msg_type == MESSAGE_ROOMS_LIST:
+                lobby.rooms = message.get("payload", {}).get("rooms", [])
+                lobby.needs_refresh = False
+            elif msg_type in (MESSAGE_ROOM_CREATED, MESSAGE_ROOM_JOINED):
+                lobby.clear_waiting()
+                cv2.destroyWindow(window_name)
+                return message
+            elif msg_type == MESSAGE_ERROR:
+                lobby.clear_waiting()
+                reason = message.get("reason", "Operation failed")
+                lobby.set_error(reason)
+
+        if lobby.needs_refresh:
+            refresh_rooms()
+
+        key = cv2.waitKey(50)
+        action = lobby.handle_key(key)
+
+        if action is not None:
+            atype, avalue = action
+            lobby.set_waiting(atype)
+            send_map = {
+                "create": (MESSAGE_CREATE_ROOM, {"room_name": avalue}),
+                "join_id": (MESSAGE_JOIN_ROOM, {"room_id": avalue}),
+                "join_room": (MESSAGE_JOIN_ROOM, {"room_id": avalue}),
+            }
+            msg_type, extra = send_map[atype]
+            bridge.send_message({
+                "type": msg_type, "username": username,
+                "password": password, **extra,
+            })
+
+        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+            break
+
+        render_lobby_screen(canvas, lobby)
+        cv2.imshow(window_name, canvas)
+
+        if key == 27 and not lobby.room_name_input and not lobby.join_id_input and not lobby.rooms:
+            break
+
+    cv2.destroyWindow(window_name)
+    return None
+
+
+def main():
+    bridge = NetworkBridge(f"ws://{NETWORK_HOST}:{NETWORK_PORT}")
+    bridge.start()
+
+    auth_result = _run_auth_screen(bridge)
+    if auth_result is None:
+        bridge.stop()
+        return
+    username, password = auth_result
+
+    entry_result = _run_lobby_screen(bridge, username, password)
 
     if entry_result is None:
         bridge.stop()

@@ -75,12 +75,11 @@ class ShellLoginLobby:
         normalized = self._normalize_username(username)
         if not normalized:
             raise LobbyError(REASON_USERNAME_REQUIRED)
-        if self._db is None:
-            raise LobbyError("Registration requires a database.")
-        try:
-            await self._db.create_user(normalized, password)
-        except UserDBError as exc:
-            raise LobbyError(str(exc))
+        if self._db is not None:
+            try:
+                await self._db.create_user(normalized, password)
+            except UserDBError as exc:
+                raise LobbyError(str(exc))
         return await self.login(normalized, password)
 
     def seat_for(self, username: str) -> Optional[PlayerSeat]:
@@ -214,7 +213,7 @@ class RoomManager:
         return None
 
     async def list_rooms(self) -> list[dict]:
-        if self._db is not None:
+        if self._db is not None and self._db._pool is not None:
             try:
                 return await self._db.list_available_rooms()
             except Exception as exc:
